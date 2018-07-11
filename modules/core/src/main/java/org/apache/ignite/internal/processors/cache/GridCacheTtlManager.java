@@ -201,9 +201,6 @@ public class GridCacheTtlManager extends GridCacheManagerAdapter {
                 }
             }
 
-            if(!(cctx.affinityNode() && cctx.ttl().eagerTtlEnabled()))
-                return false;  /* Pending tree never contains entries for that cache */
-
             boolean more = cctx.offheap().expire(dhtCtx, expireC, amount);
 
             if (more)

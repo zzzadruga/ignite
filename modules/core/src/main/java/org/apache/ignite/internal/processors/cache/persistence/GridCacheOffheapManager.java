@@ -776,10 +776,9 @@ public class GridCacheOffheapManager extends IgniteCacheOffheapManagerImpl imple
     ) throws IgniteCheckedException {
         assert !cctx.isNear() : cctx.name();
 
-        if (!hasPendingEntries || nextCleanTime > U.currentTimeMillis())
+        if (!hasPendingEntries)
             return false;
 
-        // Prevent manager being stopped in the middle of pds operation.
         if (!busyLock.enterBusy())
             return false;
 
@@ -792,10 +791,6 @@ public class GridCacheOffheapManager extends IgniteCacheOffheapManagerImpl imple
                 if (amount != -1 && cleared >= amount)
                     return true;
             }
-
-            // Throttle if there is nothing to clean anymore.
-            if (cleared < amount)
-                nextCleanTime = U.currentTimeMillis() + UNWIND_THROTTLING_TIMEOUT;
         }
         finally {
             busyLock.leaveBusy();
@@ -1163,10 +1158,6 @@ public class GridCacheOffheapManager extends IgniteCacheOffheapManagerImpl imple
 
         /** */
         private volatile CacheDataStore delegate;
-
-        /** Timestamp when next clean try will be allowed for current partition.
-         * Used for fine-grained throttling on per-partition basis. */
-        private volatile long nextStoreCleanTime;
 
         /** */
         private final boolean exists;
@@ -1730,12 +1721,12 @@ public class GridCacheOffheapManager extends IgniteCacheOffheapManagerImpl imple
         }
 
         /**
-         * Try to remove expired entries from data store.
+         * Removes expired entries from data store.
          *
          * @param cctx Cache context.
          * @param c Expiry closure that should be applied to expired entry. See {@link GridCacheTtlManager} for details.
          * @param amount Limit of processed entries by single call, {@code -1} for no limit.
-         * @return cleared entries count.
+         * @return {@code True} if unprocessed expired entries remains.
          * @throws IgniteCheckedException If failed.
          */
         public int purgeExpired(GridCacheContext cctx,
@@ -1743,39 +1734,13 @@ public class GridCacheOffheapManager extends IgniteCacheOffheapManagerImpl imple
             int amount) throws IgniteCheckedException {
             CacheDataStore delegate0 = init0(true);
 
-            long now = U.currentTimeMillis();
-
-            if (delegate0 == null || nextStoreCleanTime > now)
+            if (delegate0 == null || pendingTree == null)
                 return 0;
-
-            assert pendingTree != null : "Partition data store was not initialized.";
-
-            int cleared = purgeExpiredInternal(cctx, c, amount);
-
-            // Throttle if there is nothing to clean anymore.
-            if (cleared < amount)
-                nextStoreCleanTime = now + UNWIND_THROTTLING_TIMEOUT;
-
-            return cleared;
-        }
-
-        /**
-         * Removes expired entries from data store.
-         *
-         * @param cctx Cache context.
-         * @param c Expiry closure that should be applied to expired entry. See {@link GridCacheTtlManager} for details.
-         * @param amount Limit of processed entries by single call, {@code -1} for no limit.
-         * @return cleared entries count.
-         * @throws IgniteCheckedException If failed.
-         */
-        private int purgeExpiredInternal(GridCacheContext cctx,
-            IgniteInClosure2X<GridCacheEntryEx, GridCacheVersion> c,
-            int amount) throws IgniteCheckedException {
 
             GridDhtLocalPartition part = cctx.topology().localPartition(partId, AffinityTopologyVersion.NONE, false, false);
 
             // Skip non-owned partitions.
-            if (part == null || part.state() != OWNING)
+            if (part == null || part.state() != OWNING || pendingTree.size() == 0)
                 return 0;
 
             cctx.shared().database().checkpointReadLock();
