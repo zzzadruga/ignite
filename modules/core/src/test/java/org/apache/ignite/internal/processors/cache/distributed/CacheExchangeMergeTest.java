@@ -206,13 +206,6 @@ public class CacheExchangeMergeTest extends GridCommonAbstractTest {
     /**
      * @throws Exception If failed.
      */
-    public void testConcurrentStartServers() throws Exception {
-        concurrentStart(false);
-    }
-
-    /**
-     * @throws Exception If failed.
-     */
     public void testConcurrentStartServersAndClients() throws Exception {
         concurrentStart(true);
     }
@@ -439,8 +432,9 @@ public class CacheExchangeMergeTest extends GridCommonAbstractTest {
                             try {
                                 assertEquals(err, e.getValue(), res.get(e.getKey()));
                             } catch (AssertionFailedError err0) {
-                                TestDebugLog1.addMessage(err0.getMessage());
-                                TestDebugLog1.printPartMessages("test_debug.txt", CU.cacheId(cacheName), node.affinity(cacheName).partition(e.getKey()));
+                                err0.printStackTrace(System.out);
+                                TestDebugLog1.addMessage("1 " + err0.getMessage());
+                                TestDebugLog1.printKeyAndPartMessages("test_debug.txt", e.getKey(), node.affinity(cacheName).partition(e.getKey()), CU.cacheId(cacheName));
                                 System.exit(1);
                             }
                         }
@@ -449,7 +443,7 @@ public class CacheExchangeMergeTest extends GridCommonAbstractTest {
                     if (cache.getConfiguration(CacheConfiguration.class).getAtomicityMode() == TRANSACTIONAL) {
                         for (TransactionConcurrency concurrency : TransactionConcurrency.values()) {
                             for (TransactionIsolation isolation : TransactionIsolation.values())
-                                checkNodeCaches(err, node, cache, concurrency, isolation);
+                                checkNodeCaches(err, node, cache, TransactionConcurrency.OPTIMISTIC, TransactionIsolation.SERIALIZABLE);
                         }
                     }
                 }
@@ -496,14 +490,18 @@ public class CacheExchangeMergeTest extends GridCommonAbstractTest {
         }
         catch (ClusterTopologyException ignore) {
             // No-op.
+            ignore.printStackTrace();
+
+            System.exit(2);
         }
 
         for (Map.Entry<Object, Object> e : map.entrySet()) {
             try {
                 assertEquals(err + " " + concurrency + " " + isolation, e.getValue(), cache.get(e.getKey()));
             } catch (AssertionFailedError err0) {
-                TestDebugLog1.addMessage(err0.getMessage());
-                TestDebugLog1.printPartMessages("test_debug.txt", CU.cacheId(cache.getName()), node.affinity(cache.getName()).partition(e.getKey()));
+                err0.printStackTrace(System.out);
+                TestDebugLog1.addMessage("2 " + node.cluster().localNode().id() + " " + err0.getMessage());
+                TestDebugLog1.printKeyAndPartMessages("test_debug.txt", e.getKey(), node.affinity(cache.getName()).partition(e.getKey()), CU.cacheId(cache.getName()));
                 System.exit(1);
             }
         }

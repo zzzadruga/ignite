@@ -912,7 +912,7 @@ public class GridDhtPartitionTopologyImpl implements GridDhtPartitionTopology {
                 else if (loc != null && state == RENTING && !showRenting) {
                     throw new GridDhtInvalidPartitionException(p, "Adding entry to partition that is concurrently " +
                         "evicted [grp=" + grp.cacheOrGroupName() + ", part=" + p + ", shouldBeMoving="
-                        + ", belongs=" + belongs + ", topVer=" + topVer + ", curTopVer=" + this.readyTopVer + "]");
+                        + ", belongs=" + belongs + ", belongs0=" + partitionLocalNode(p, this.readyTopVer) + ", topVer=" + topVer + ", curTopVer=" + this.readyTopVer + "]");
                 }
 
                 if (loc == null) {

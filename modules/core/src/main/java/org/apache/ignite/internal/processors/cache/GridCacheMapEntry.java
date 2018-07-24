@@ -199,8 +199,6 @@ public abstract class GridCacheMapEntry extends GridMetadataAwareAdapter impleme
     protected void value(@Nullable CacheObject val) {
         assert lock.isHeldByCurrentThread();
 
-        TestDebugLog1.addCacheEntryMessage(this, val, "set");
-
         this.val = val;
     }
 
@@ -1041,6 +1039,8 @@ public abstract class GridCacheMapEntry extends GridMetadataAwareAdapter impleme
 
             if (tx != null && cctx.group().persistenceEnabled() && cctx.group().walEnabled())
                 logPtr = logTxUpdate(tx, val, expireTime, updateCntr0);
+
+            TestDebugLog1.addCacheEntryMessage(this, val, "innerSet");
 
             update(val, expireTime, ttl, newVer, true);
 
@@ -2773,6 +2773,8 @@ public abstract class GridCacheMapEntry extends GridMetadataAwareAdapter impleme
                 update = storeValue(val, expTime, ver, p);
 
             if (update) {
+                TestDebugLog1.addCacheEntryMessage(this, val, "initialVal");
+
                 update(val, expTime, ttl, ver, true);
 
                 boolean skipQryNtf = false;

@@ -474,6 +474,13 @@ public class TestDebugLog1 {
                 if (msg instanceof EntryMessage && !((EntryMessage)msg).key.equals(key))
                     continue;
 
+                if (msg instanceof PartMessage) {
+                    PartMessage pm = (PartMessage)msg;
+
+                    if (pm.cacheId != cacheId || pm.partId != partId)
+                        continue;
+                }
+
                 System.out.println(msg);
             }
         }
