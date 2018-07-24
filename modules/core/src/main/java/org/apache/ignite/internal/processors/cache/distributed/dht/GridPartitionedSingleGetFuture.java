@@ -23,6 +23,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.IgniteLogger;
+import org.apache.ignite.TestDebugLog1;
 import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.internal.IgniteDiagnosticAware;
 import org.apache.ignite.internal.IgniteDiagnosticPrepareContext;
@@ -328,6 +329,8 @@ public class GridPartitionedSingleGetFuture extends GridCacheFutureAdapter<Objec
 
         List<ClusterNode> affNodes = cctx.affinity().nodesByPartition(part, topVer);
 
+        TestDebugLog1.addEntryMessage(cctx.cacheId(), key, U.nodeIds(affNodes), "get map " + topVer);
+
         if (affNodes.isEmpty()) {
             onDone(serverNotFoundError(topVer));
 
@@ -501,6 +504,8 @@ public class GridPartitionedSingleGetFuture extends GridCacheFutureAdapter<Objec
      * @param res Result.
      */
     public void onResult(UUID nodeId, GridNearSingleGetResponse res) {
+        TestDebugLog1.addEntryMessage(cctx.cacheId(), key, nodeId, "get res " + topVer);
+
         if (!processResponse(nodeId) ||
             !checkError(res.error(), res.invalidPartitions(), res.topologyVersion(), nodeId))
             return;

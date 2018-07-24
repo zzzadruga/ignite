@@ -35,6 +35,7 @@ import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.IgniteException;
 import org.apache.ignite.IgniteLogger;
 import org.apache.ignite.IgniteSystemProperties;
+import org.apache.ignite.TestDebugLog1;
 import org.apache.ignite.cache.affinity.AffinityCentralizedFunction;
 import org.apache.ignite.cache.affinity.AffinityFunction;
 import org.apache.ignite.cluster.ClusterNode;
@@ -231,6 +232,13 @@ public class GridAffinityAssignmentCache {
                 + ", topVer=" + topVer
                 + ", aff=" + fold(affAssignment) + "]");
         }
+
+        debugAssignment("init " + topVer, affAssignment);
+    }
+
+    private void debugAssignment(String msg, List<List<ClusterNode>> affAssignment) {
+        for (int i = 0; i < partsCnt; i++)
+            TestDebugLog1.addPartMessage(grpId, i, U.nodeIds(affAssignment.get(i)), msg);
     }
 
     /**
@@ -398,6 +406,8 @@ public class GridAffinityAssignmentCache {
 
         if (locCache)
             initialize(topVer, assignment);
+
+        debugAssignment("calc " + topVer, assignment);
 
         return assignment;
     }

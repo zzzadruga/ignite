@@ -31,9 +31,11 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import junit.framework.AssertionFailedError;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
 import org.apache.ignite.IgniteSystemProperties;
+import org.apache.ignite.TestDebugLog1;
 import org.apache.ignite.cache.CacheAtomicityMode;
 import org.apache.ignite.cache.CacheMode;
 import org.apache.ignite.cluster.ClusterNode;
@@ -62,6 +64,7 @@ import org.apache.ignite.internal.util.future.GridCompoundFuture;
 import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.internal.util.typedef.G;
 import org.apache.ignite.internal.util.typedef.PA;
+import org.apache.ignite.internal.util.typedef.internal.CU;
 import org.apache.ignite.lang.IgniteBiPredicate;
 import org.apache.ignite.lang.IgniteClosure;
 import org.apache.ignite.lang.IgnitePredicate;
@@ -450,6 +453,8 @@ public class CacheExchangeMergeTest extends GridCommonAbstractTest {
             checkCaches();
 
             stopAllGrids();
+
+            TestDebugLog1.clear();
         }
     }
 
@@ -1374,8 +1379,15 @@ public class CacheExchangeMergeTest extends GridCommonAbstractTest {
 
                         Map<Object, Object> res = cache.getAll(map.keySet());
 
-                        for (Map.Entry<Integer, Integer> e : map.entrySet())
-                            assertEquals(err, e.getValue(), res.get(e.getKey()));
+                        for (Map.Entry<Integer, Integer> e : map.entrySet()) {
+                            try {
+                                assertEquals(err, e.getValue(), res.get(e.getKey()));
+                            } catch (AssertionFailedError err0) {
+                                TestDebugLog1.addMessage(err0.getMessage());
+                                TestDebugLog1.printPartMessages("test_debug.txt", CU.cacheId(cacheName), node.affinity(cacheName).partition(e.getKey()));
+                                System.exit(1);
+                            }
+                        }
                     }
 
                     if (cache.getConfiguration(CacheConfiguration.class).getAtomicityMode() == TRANSACTIONAL) {
@@ -1430,8 +1442,15 @@ public class CacheExchangeMergeTest extends GridCommonAbstractTest {
             // No-op.
         }
 
-        for (Map.Entry<Object, Object> e : map.entrySet())
-            assertEquals(err, e.getValue(), cache.get(e.getKey()));
+        for (Map.Entry<Object, Object> e : map.entrySet()) {
+            try {
+                assertEquals(err + " " + concurrency + " " + isolation, e.getValue(), cache.get(e.getKey()));
+            } catch (AssertionFailedError err0) {
+                TestDebugLog1.addMessage(err0.getMessage());
+                TestDebugLog1.printPartMessages("test_debug.txt", CU.cacheId(cache.getName()), node.affinity(cache.getName()).partition(e.getKey()));
+                System.exit(1);
+            }
+        }
     }
 
     /**

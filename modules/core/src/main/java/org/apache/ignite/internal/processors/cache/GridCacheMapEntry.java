@@ -33,6 +33,7 @@ import org.apache.ignite.IgniteCache;
 import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.IgniteException;
 import org.apache.ignite.IgniteLogger;
+import org.apache.ignite.TestDebugLog1;
 import org.apache.ignite.cache.eviction.EvictableEntry;
 import org.apache.ignite.internal.NodeStoppingException;
 import org.apache.ignite.internal.pagemem.wal.StorageException;
@@ -197,6 +198,8 @@ public abstract class GridCacheMapEntry extends GridMetadataAwareAdapter impleme
      */
     protected void value(@Nullable CacheObject val) {
         assert lock.isHeldByCurrentThread();
+
+        TestDebugLog1.addCacheEntryMessage(this, val, "set");
 
         this.val = val;
     }

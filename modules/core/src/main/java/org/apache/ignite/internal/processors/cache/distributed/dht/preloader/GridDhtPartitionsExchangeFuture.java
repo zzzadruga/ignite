@@ -40,6 +40,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.IgniteLogger;
 import org.apache.ignite.IgniteSystemProperties;
+import org.apache.ignite.TestDebugLog1;
 import org.apache.ignite.cache.CacheMode;
 import org.apache.ignite.cache.CacheRebalanceMode;
 import org.apache.ignite.cluster.ClusterNode;
@@ -660,6 +661,13 @@ public class GridDhtPartitionsExchangeFuture extends GridDhtTopologyFutureAdapte
                     ", evtNode=" + firstDiscoEvt.eventNode().id() +
                     ", customEvt=" + (firstDiscoEvt.type() == EVT_DISCOVERY_CUSTOM_EVT ? ((DiscoveryCustomEvent)firstDiscoEvt).customMessage() : null) +
                     ", allowMerge=" + exchCtx.mergeExchanges() + ']');
+
+                TestDebugLog1.addMessage("Started exchange init [topVer=" + topVer +
+                        ", crd=" + crdNode +
+                        ", evt=" + IgniteUtils.gridEventName(firstDiscoEvt.type()) +
+                        ", evtNode=" + firstDiscoEvt.eventNode().id() +
+                        ", customEvt=" + (firstDiscoEvt.type() == EVT_DISCOVERY_CUSTOM_EVT ? ((DiscoveryCustomEvent)firstDiscoEvt).customMessage() : null) +
+                        ", allowMerge=" + exchCtx.mergeExchanges() + ']');
             }
 
             ExchangeType exchange;
