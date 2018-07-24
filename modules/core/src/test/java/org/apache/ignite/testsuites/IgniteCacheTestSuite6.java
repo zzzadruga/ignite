@@ -67,7 +67,7 @@ public class IgniteCacheTestSuite6 extends TestSuite {
     public static TestSuite suite() throws Exception {
         TestSuite suite = new TestSuite("IgniteCache Test Suite part 6");
 
-        for (int i = 0; i < 10; i++)
+        for (int i = 0; i < 2; i++)
             suite.addTestSuite(CacheExchangeMergeTest.class);
 
         return suite;
