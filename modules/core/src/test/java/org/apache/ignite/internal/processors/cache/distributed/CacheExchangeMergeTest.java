@@ -443,7 +443,7 @@ public class CacheExchangeMergeTest extends GridCommonAbstractTest {
                     if (cache.getConfiguration(CacheConfiguration.class).getAtomicityMode() == TRANSACTIONAL) {
                         for (TransactionConcurrency concurrency : TransactionConcurrency.values()) {
                             for (TransactionIsolation isolation : TransactionIsolation.values())
-                                checkNodeCaches(err, node, cache, TransactionConcurrency.OPTIMISTIC, TransactionIsolation.SERIALIZABLE);
+                                checkNodeCaches(err, node, cache, TransactionConcurrency.PESSIMISTIC, TransactionIsolation.REPEATABLE_READ);
                         }
                     }
                 }
@@ -492,7 +492,7 @@ public class CacheExchangeMergeTest extends GridCommonAbstractTest {
             // No-op.
             ignore.printStackTrace();
 
-            System.exit(2);
+            return;
         }
 
         for (Map.Entry<Object, Object> e : map.entrySet()) {
