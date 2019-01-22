@@ -103,6 +103,7 @@ import org.apache.ignite.lang.IgniteFuture;
 import org.apache.ignite.lang.IgniteInClosure;
 import org.apache.ignite.lang.IgniteProductVersion;
 import org.apache.ignite.mxbean.CacheMetricsMXBean;
+import org.apache.ignite.plugin.security.SecurityException;
 import org.apache.ignite.plugin.security.SecurityPermission;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -692,6 +693,9 @@ public class IgniteCacheProxyImpl<K, V> extends AsyncSupportAdapter<IgniteCache<
         catch (Exception e) {
             if (e instanceof CacheException)
                 throw (CacheException)e;
+
+            if (e instanceof SecurityException)
+                throw (SecurityException)e;
 
             throw new CacheException(e.getMessage(), e);
         }

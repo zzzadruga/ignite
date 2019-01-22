@@ -22,6 +22,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.function.Consumer;
 import org.apache.ignite.Ignition;
+import org.apache.ignite.cache.query.ScanQuery;
 import org.apache.ignite.client.ClientAuthorizationException;
 import org.apache.ignite.client.Config;
 import org.apache.ignite.client.IgniteClient;
@@ -218,7 +219,8 @@ public class ThinClientSecurityTest extends AbstractSecurityTest {
             c -> c.cache(cacheName).putIfAbsent("key", "value"),
             c -> c.cache(cacheName).getAndPut("key", "value"),
             c -> c.cache(cacheName).getAndRemove("key"),
-            c -> c.cache(cacheName).getAndReplace("key", "value")
+            c -> c.cache(cacheName).getAndReplace("key", "value"),
+            c -> c.cache(cacheName).query(new ScanQuery<>()).getAll()
         );
     }
 
