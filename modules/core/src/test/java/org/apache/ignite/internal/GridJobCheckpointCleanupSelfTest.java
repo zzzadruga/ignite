@@ -82,6 +82,7 @@ public class GridJobCheckpointCleanupSelfTest extends GridCommonAbstractTest {
             taskIgnite.compute().execute(new CheckpointCountingTestTask(), jobIgnite.cluster().localNode());
         }
         finally {
+            System.out.println("&&& STOP ALL GRIDS");
             stopAllGrids();
         }
 
@@ -114,31 +115,31 @@ public class GridJobCheckpointCleanupSelfTest extends GridCommonAbstractTest {
         /** {@inheritDoc} */
         @Override public boolean saveCheckpoint(String key, byte[] state, long timeout, boolean overwrite)
             throws IgniteSpiException {
-            cntr.incrementAndGet();
+            System.out.println("&&& " + getName() + " cntr.incrementAndGet() " + cntr.incrementAndGet() + "; key " + key);
 
             return true;
         }
 
         /** {@inheritDoc} */
         @Override public boolean removeCheckpoint(String key) {
-            cntr.decrementAndGet();
+            System.out.println("&&& " + getName() + " cntr.decrementAndGet() " + cntr.decrementAndGet() + "; key " + key);
 
             return true;
         }
 
         /** {@inheritDoc} */
         @Override public void setCheckpointListener(CheckpointListener lsnr) {
-            // No-op.
+            System.out.println("&&& " + getName() + " SET CHECKPOINT LISTENER");
         }
 
         /** {@inheritDoc} */
         @Override public void spiStart(@Nullable String igniteInstanceName) throws IgniteSpiException {
-            // No-op.
+            System.out.println("&&& " + getName() + " SPI START");
         }
 
         /** {@inheritDoc} */
         @Override public void spiStop() throws IgniteSpiException {
-            // No-op.
+            System.out.println("&&& " + getName() + " SPI STOP");
         }
     }
 
@@ -156,21 +157,23 @@ public class GridJobCheckpointCleanupSelfTest extends GridCommonAbstractTest {
                         private ComputeTaskSession ses;
 
                         @Nullable @Override public Object execute() {
+                            System.out.println("&&& JOB EXECUTE");
                             ses.saveCheckpoint("checkpoint-key", "checkpoint-value");
 
-                            return null;
+                            return 999;
                         }
                     }, node);
             }
 
             assert false : "Expected node wasn't found in grid";
 
-            // Never accessible.
+            // Never accessible.b
             return null;
         }
 
         /** {@inheritDoc} */
         @Override public Object reduce(List<ComputeJobResult> results) {
+            System.out.println("&&& TASK REDUCE, results: " + results.get(0).getData());
             return null;
         }
     }

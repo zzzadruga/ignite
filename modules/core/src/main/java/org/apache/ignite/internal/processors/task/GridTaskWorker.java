@@ -1187,6 +1187,7 @@ class GridTaskWorker<T, R> extends GridWorker implements GridTimeoutObject {
                 throw e;
         }
         finally {
+            System.out.println("&&& GridTaskWorker finishTask");
             finishTask(reduceRes, userE);
         }
     }
@@ -1632,6 +1633,7 @@ class GridTaskWorker<T, R> extends GridWorker implements GridTimeoutObject {
                 recordTaskEvent(EVT_TASK_FAILED, "Task failed.");
 
             // Clean resources prior to finishing future.
+            System.out.println("&&& GridTaskWorker evt Lsnr.onTaskFinished(" + this.subjId + ")");
             evtLsnr.onTaskFinished(this);
 
             if (cancelChildren)

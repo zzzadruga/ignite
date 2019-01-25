@@ -160,6 +160,8 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
         boolean override)
         throws IgniteCheckedException
     {
+        System.out.println("storeCheckpoint id: " + ses.getId() + "; key " + key + "; checkpointSpi " + ses.getCheckpointSpi());
+
         if (!enabled())
             return false;
 
@@ -211,8 +213,11 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
                     Set<String> keys = keyMap.get(ses.getId());
 
                     if (keys == null) {
+
+                        System.out.print("&&& KEYMAP [216] PUT " + ses.getId());
                         Set<String> old = keyMap.putIfAbsent(ses.getId(),
                             (CheckpointSet)(keys = new CheckpointSet(ses.session())));
+                        System.out.println("; OLD SES " + old + "; NEW SES JOBID " + ((CheckpointSet)keys).session().getJobId());
 
                         if (old != null)
                             keys = old;
@@ -367,15 +372,24 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
         if (!enabled())
             return;
 
+        System.out.println("&&& sessionEnd id: " + ses.getId() + "; checkpointSpi " + ses.getCheckpointSpi() + "; cleanup: " + ((cleanup) ? "YES" : "NO"));
+
         closedSess.add(ses.getId());
 
         // If on task node.
+        System.out.println("&&& GridCheckpointManager onSessionEnd " + (ses.getJobId() == null ? "TASK NODE" : "JOB NODE"));
         if (ses.getJobId() == null) {
+            System.out.print("&&& TASK KEYMAP REMOVE SESSION, CONTAINS BEFORE REMOVE: " + (keyMap.containsKey(ses.getId()) ? (" YES " + keyMap.get(ses.getId()).session().getId()) : " NO "));
             Set<String> keys = keyMap.remove(ses.getId());
+            System.out.println(" AFTER REMOVE " + (keyMap.containsKey(ses.getId()) ? (" YES (bad) " + keyMap.get(ses.getId()).session().getId()) : " NO (good)"));
 
             if (keys != null) {
-                for (String key : keys)
+                for (String key : keys) {
+                    System.out.println("&&& TASK KEY " + key +"; SPI NAME = " + getSpi(ses.getCheckpointSpi()).getName());
+
                     getSpi(ses.getCheckpointSpi()).removeCheckpoint(key);
+
+                }
             }
         }
         // If on job node.
@@ -385,8 +399,12 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
 
             // Make sure that we don't remove checkpoint set that
             // was created by newly created session.
-            if (keys != null && keys.session() == ses.session())
+            if (keys != null && keys.session() == ses.session()) {
+                System.out.println("&&& JOB KEY sessionId " + ses.getId());
+                System.out.print("&&& JOB KEYMAP REMOVE SESSION, CONTAINS BEFORE REMOVE: " + (keyMap.containsKey(ses.getId()) ? (" YES " + keyMap.get(ses.getId()).session().getId()) : " NO "));
                 keyMap.remove(ses.getId(), keys);
+                System.out.println("; AFTER REMOVE " + (keyMap.containsKey(ses.getId()) ? (" YES (bad)" + keyMap.get(ses.getId()).session().getId()) : " NO (good)"));
+            }
         }
     }
 
@@ -488,7 +506,10 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
                     return;
                 }
 
+                System.out.print("&&& KEYMAP [507] PUT " + sesId);
                 Set<String> old = keyMap.putIfAbsent(sesId, (CheckpointSet)(keys = new CheckpointSet(ses)));
+                System.out.println("; OLD SES " + old + "; NEW SES JOBID " + ((CheckpointSet)keys).session().getJobId());
+
 
                 if (old != null)
                     keys = old;

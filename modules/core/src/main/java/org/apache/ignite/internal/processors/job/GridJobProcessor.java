@@ -1758,16 +1758,21 @@ public class GridJobProcessor extends GridProcessorAdapter {
 
         /** {@inheritDoc} */
         @Override public void onJobFinished(GridJobWorker worker) {
+            System.out.println("&&& GridJobProcessor onJobFinished " + worker.toString());
+
             if (log.isDebugEnabled())
                 log.debug("Received onJobFinished() callback: " + worker);
 
             GridJobSessionImpl ses = worker.getSession();
 
             // If last job for the task on this node.
+
+            System.out.print("&&& GridJobProcessor onJobFinished removeSession sesId " + ses.getId() + "; jobId " + ses.getJobId() + "; taskNodeId " + ses.getTaskNodeId());
             if (ses.isFullSupport() && ctx.session().removeSession(ses.getId())) {
                 ses.onClosed();
 
                 // Unregister checkpoints.
+                System.out.println("&&& GridJobProcessor onJobFinished onSessionEnd cleanup(true) sesId " + ses.getId() + "; jobId " + ses.getJobId() + "; taskNodeId " + ses.getTaskNodeId());
                 ctx.checkpoint().onSessionEnd(ses, true);
             }
 

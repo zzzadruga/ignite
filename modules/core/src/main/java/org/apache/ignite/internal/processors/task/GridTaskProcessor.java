@@ -1295,6 +1295,8 @@ public class GridTaskProcessor extends GridProcessorAdapter implements IgniteCha
 
         /** {@inheritDoc} */
         @Override public void onTaskFinished(GridTaskWorker<?, ?> worker) {
+            System.out.println("&&& GridTaskProcessor onTaskFinished " + worker.toString());
+
             GridTaskSessionImpl ses = worker.getSession();
 
             if (ses.isFullSupport()) {
@@ -1302,10 +1304,12 @@ public class GridTaskProcessor extends GridProcessorAdapter implements IgniteCha
                     worker.getSession().onClosed();
                 }
 
+                System.out.println("&&& GridTaskProcessor onTaskFinished onSessionEnd cleanup(true) sesId " + ses.getId() + "; jobId " + ses.getJobId() + "; taskNodeId " + ses.getTaskNodeId());
                 ctx.checkpoint().onSessionEnd(ses, false);
 
                 // Delete session altogether.
-                ctx.session().removeSession(ses.getId());
+                System.out.print("&&& GridTaskProcessor onTaskFinished removeSession sesId " + ses.getId() + "; jobId " + ses.getJobId() + "; taskNodeId " + ses.getTaskNodeId());
+                System.out.println(" REMOVE " + ctx.session().removeSession(ses.getId()));
             }
 
             boolean rmv = tasks.remove(worker.getTaskSessionId(), worker);
