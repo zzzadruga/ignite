@@ -71,6 +71,7 @@ import org.apache.ignite.internal.processors.affinity.AffinityTopologyVersion;
 import org.apache.ignite.internal.processors.closure.AffinityTask;
 import org.apache.ignite.internal.processors.service.GridServiceNotFoundException;
 import org.apache.ignite.internal.processors.timeout.GridTimeoutObject;
+import org.apache.ignite.internal.util.IgniteUtils;
 import org.apache.ignite.internal.util.typedef.CO;
 import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.internal.util.typedef.X;
@@ -469,6 +470,7 @@ class GridTaskWorker<T, R> extends GridWorker implements GridTimeoutObject {
      * Maps this task's jobs to nodes and sends them out.
      */
     @Override protected void body() {
+        System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskWorker.body() evtLsnr.onTaskStarted()");
         evtLsnr.onTaskStarted(this);
 
         try {
@@ -514,6 +516,7 @@ class GridTaskWorker<T, R> extends GridWorker implements GridTimeoutObject {
             // Inject resources.
             ctx.resource().inject(dep, task, ses, balancer, mapper);
 
+            System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskWorker.body() mappedJobs");
             Map<? extends ComputeJob, ClusterNode> mappedJobs = U.wrapThreadLoader(dep.classLoader(),
                 new Callable<Map<? extends ComputeJob, ClusterNode>>() {
                     @Override public Map<? extends ComputeJob, ClusterNode> call() {
@@ -539,6 +542,7 @@ class GridTaskWorker<T, R> extends GridWorker implements GridTimeoutObject {
                 lockRespProc = false;
             }
 
+            System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskWorker.body() processDelayedResponses");
             processDelayedResponses();
         }
         catch (ClusterGroupEmptyCheckedException e) {
@@ -575,6 +579,8 @@ class GridTaskWorker<T, R> extends GridWorker implements GridTimeoutObject {
      * @throws IgniteCheckedException Thrown in case of any error.
      */
     private void processMappedJobs(Map<? extends ComputeJob, ClusterNode> jobs) throws IgniteCheckedException {
+        System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskWorker.processMappedJobs()");
+
         if (F.isEmpty(jobs))
             return;
 
@@ -597,6 +603,7 @@ class GridTaskWorker<T, R> extends GridWorker implements GridTimeoutObject {
 
             GridJobSiblingImpl sib = new GridJobSiblingImpl(ses.getId(), jobId, node.id(), ctx);
 
+            System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskWorker.processMappedJobs() Map jobs to nodes for computation jobId " + jobId + "; nodeId " + node.id());
             jobResList.add(new GridJobResultImpl(job, jobId, node, sib));
 
             // Do not add siblings if result cache is disabled.
@@ -620,6 +627,7 @@ class GridTaskWorker<T, R> extends GridWorker implements GridTimeoutObject {
             // Populate all remote mappedJobs into map, before mappedJobs are sent.
             // This is done to avoid race condition when we start
             // getting results while still sending out references.
+            System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskWorker.processMappedJobs() Populate all remote mappedJobs into map");
             for (GridJobResultImpl res : jobResList) {
                 if (jobRes.put(res.getJobContext().getJobId(), res) != null)
                     throw new IgniteCheckedException("Duplicate job ID for remote job found: " + res.getJobContext().getJobId());
@@ -657,6 +665,7 @@ class GridTaskWorker<T, R> extends GridWorker implements GridTimeoutObject {
         }
 
         // Send out all remote mappedJobs.
+        System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskWorker.processMappedJobs() Send out all remote mappedJobs");
         for (GridJobResultImpl res : jobResList) {
             evtLsnr.onJobSend(this, res.getSibling());
 
@@ -716,6 +725,8 @@ class GridTaskWorker<T, R> extends GridWorker implements GridTimeoutObject {
      */
     void onResponse(GridJobExecuteResponse msg) {
         assert msg != null;
+
+        System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskWorker.onResponse() jobId " + msg.getJobId() + "; nodeId " + msg.getNodeId());
 
         if (fut.isDone()) {
             if (log.isDebugEnabled())
@@ -855,11 +866,13 @@ class GridTaskWorker<T, R> extends GridWorker implements GridTimeoutObject {
                     results = Collections.emptyList();
                 else {
                     synchronized (mux) {
+                        System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskWorker.onResponse() getRemoteResults ");
                         results = getRemoteResults();
                     }
                 }
 
                 ComputeJobResultPolicy plc = result(jobRes, results);
+                System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskWorker.onResponse() gComputeJobResultPolicy " + plc.name());
 
                 if (plc == null) {
                     String errMsg = "Failed to obtain remote job result policy for result from ComputeTask.result(..) " +
@@ -898,7 +911,9 @@ class GridTaskWorker<T, R> extends GridWorker implements GridTimeoutObject {
                     } else {
                         switch (plc) {
                             // Start reducing all results received so far.
+
                             case REDUCE: {
+                                System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskWorker.onResponse() REDUCE ");
                                 state = State.REDUCING;
 
                                 break;
@@ -907,6 +922,7 @@ class GridTaskWorker<T, R> extends GridWorker implements GridTimeoutObject {
                             // Keep waiting if there are more responses to come,
                             // otherwise, reduce.
                             case WAIT: {
+                                System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskWorker.onResponse() WAIT ");
                                 assert results.size() <= this.jobRes.size();
 
                                 // If there are more results to wait for.
@@ -923,6 +939,7 @@ class GridTaskWorker<T, R> extends GridWorker implements GridTimeoutObject {
                             }
 
                             case FAILOVER: {
+                                System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskWorker.onResponse() FAILOVER ");
                                 if (affCacheIds != null) {
                                     mapTopVer = ctx.cache().context().exchange().readyAffinityVersion();
 
@@ -970,8 +987,10 @@ class GridTaskWorker<T, R> extends GridWorker implements GridTimeoutObject {
                     else {
                         evtLsnr.onJobFinished(this, jobRes.getSibling());
 
-                        if (plc == ComputeJobResultPolicy.REDUCE)
+                        if (plc == ComputeJobResultPolicy.REDUCE) {
+                            System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskWorker.onResponse() reduce results" + results.size());
                             reduce(results);
+                        }
                     }
                 }
             }
@@ -1142,6 +1161,7 @@ class GridTaskWorker<T, R> extends GridWorker implements GridTimeoutObject {
 
         try {
             try {
+                System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskWorker reduce() Reduce results");
                 // Reduce results.
                 reduceRes = U.wrapThreadLoader(dep.classLoader(), new Callable<R>() {
                     @Nullable @Override public R call() {
@@ -1441,6 +1461,7 @@ class GridTaskWorker<T, R> extends GridWorker implements GridTimeoutObject {
                             else
                                 plc = PUBLIC_POOL;
                         }
+                        System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskWorker.sendRequest() Send job execution request jobId: " + res.getJobContext().getJobId());
 
                         // Send job execution request.
                         ctx.io().sendToGridTopic(node, TOPIC_JOB, req, plc);

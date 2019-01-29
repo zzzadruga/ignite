@@ -67,6 +67,7 @@ import org.apache.ignite.internal.processors.cache.IgniteInternalCache;
 import org.apache.ignite.internal.processors.cluster.IgniteChangeGlobalStateSupport;
 import org.apache.ignite.internal.util.GridConcurrentFactory;
 import org.apache.ignite.internal.util.GridSpinReadWriteLock;
+import org.apache.ignite.internal.util.IgniteUtils;
 import org.apache.ignite.internal.util.lang.GridPeerDeployAware;
 import org.apache.ignite.internal.util.typedef.C1;
 import org.apache.ignite.internal.util.typedef.F;
@@ -558,6 +559,8 @@ public class GridTaskProcessor extends GridProcessorAdapter implements IgniteCha
         @Nullable String execName) {
         assert sesId != null;
 
+        System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskProcessor.startTask " + taskName);
+
         String taskClsName;
 
         if (task != null) {
@@ -595,6 +598,8 @@ public class GridTaskProcessor extends GridProcessorAdapter implements IgniteCha
 
         IgniteCheckedException deployEx = null;
         GridDeployment dep = null;
+
+        System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskProcessor.startTask Deploy user task class");
 
         // User provided task name.
         if (taskName != null) {
@@ -716,6 +721,8 @@ public class GridTaskProcessor extends GridProcessorAdapter implements IgniteCha
             assert deployEx != null;
         else
             internal = dep.internalTask(task, taskCls);
+
+        System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridTaskProcessor.startTask createTaskSession");
 
         // Creates task session with task name and task version.
         GridTaskSessionImpl ses = ctx.session().createTaskSession(
@@ -1248,6 +1255,8 @@ public class GridTaskProcessor extends GridProcessorAdapter implements IgniteCha
 
         /** {@inheritDoc} */
         @Override public void onTaskStarted(GridTaskWorker<?, ?> worker) {
+            System.out.println("&&& GridTaskProcessor.TaskEventListener onTaskStarted Worker = " + worker.name());
+
             // Register for timeout notifications.
             if (worker.endTime() < Long.MAX_VALUE)
                 ctx.timeout().addTimeoutObject(worker);
@@ -1255,6 +1264,7 @@ public class GridTaskProcessor extends GridProcessorAdapter implements IgniteCha
 
         /** {@inheritDoc} */
         @Override public void onJobSend(GridTaskWorker<?, ?> worker, GridJobSiblingImpl sib) {
+            System.out.println("&&& GridTaskProcessor.TaskEventListener onJobSend nodeId" + sib.nodeId() + " Worker = " + worker.name());
             if (worker.getSession().isFullSupport())
                 // Listener is stateless, so same listener can be reused for all jobs.
                 ctx.io().addMessageListener(sib.taskTopic(), msgLsnr);
@@ -1288,6 +1298,7 @@ public class GridTaskProcessor extends GridProcessorAdapter implements IgniteCha
         /** {@inheritDoc} */
         @Override public void onJobFinished(GridTaskWorker<?, ?> worker, GridJobSiblingImpl sib) {
             // Mark sibling finished for the purpose of setting session attributes.
+            System.out.println("&&& GridTaskProcessor.TaskEventListener onJobFinished nodeId" + sib.nodeId() + " Worker = " + worker.name());
             synchronized (worker.getSession()) {
                 sib.onJobDone();
             }
@@ -1295,7 +1306,7 @@ public class GridTaskProcessor extends GridProcessorAdapter implements IgniteCha
 
         /** {@inheritDoc} */
         @Override public void onTaskFinished(GridTaskWorker<?, ?> worker) {
-            System.out.println("&&& GridTaskProcessor onTaskFinished " + worker.toString());
+            System.out.println("&&& GridTaskProcessor.TaskEventListener onTaskFinished " + worker.name());
 
             GridTaskSessionImpl ses = worker.getSession();
 
@@ -1304,11 +1315,11 @@ public class GridTaskProcessor extends GridProcessorAdapter implements IgniteCha
                     worker.getSession().onClosed();
                 }
 
-                System.out.println("&&& GridTaskProcessor onTaskFinished onSessionEnd cleanup(true) sesId " + ses.getId() + "; jobId " + ses.getJobId() + "; taskNodeId " + ses.getTaskNodeId());
+                System.out.println("&&& GridTaskProcessor.TaskEventListener onTaskFinished onSessionEnd cleanup(true) sesId " + ses.getId() + "; jobId " + ses.getJobId() + "; taskNodeId " + ses.getTaskNodeId());
                 ctx.checkpoint().onSessionEnd(ses, false);
 
                 // Delete session altogether.
-                System.out.print("&&& GridTaskProcessor onTaskFinished removeSession sesId " + ses.getId() + "; jobId " + ses.getJobId() + "; taskNodeId " + ses.getTaskNodeId());
+                System.out.print("&&& GridTaskProcessor.TaskEventListener onTaskFinished removeSession sesId " + ses.getId() + "; jobId " + ses.getJobId() + "; taskNodeId " + ses.getTaskNodeId());
                 System.out.println(" REMOVE " + ctx.session().removeSession(ses.getId()));
             }
 

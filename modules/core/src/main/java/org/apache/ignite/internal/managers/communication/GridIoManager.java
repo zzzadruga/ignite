@@ -1558,8 +1558,9 @@ public class GridIoManager extends GridManagerAdapter<CommunicationSpi<Serializa
             CUR_PLC.set(plc);
 
         try {
+            System.out.println("&&& lsnr msg " + msg.getClass().getName());
             lsnr.onMessage(nodeId, msg, plc);
-            System.out.println("lsnr msg " + msg.getClass().getName());
+
         }
         finally {
             if (change)

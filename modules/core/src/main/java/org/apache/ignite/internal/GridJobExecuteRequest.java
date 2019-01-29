@@ -28,6 +28,7 @@ import org.apache.ignite.compute.ComputeJob;
 import org.apache.ignite.compute.ComputeJobSibling;
 import org.apache.ignite.configuration.DeploymentMode;
 import org.apache.ignite.internal.processors.affinity.AffinityTopologyVersion;
+import org.apache.ignite.internal.util.IgniteUtils;
 import org.apache.ignite.internal.util.tostring.GridToStringExclude;
 import org.apache.ignite.internal.util.tostring.GridToStringInclude;
 import org.apache.ignite.internal.util.typedef.internal.S;
@@ -240,6 +241,7 @@ public class GridJobExecuteRequest implements ExecutorAwareMessage {
         assert clsLdrId != null;
         assert userVer != null;
         assert depMode != null;
+        System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridJobExecutionRequest sesId " + sesId +"; jobId " + jobId);
 
         this.sesId = sesId;
         this.jobId = jobId;

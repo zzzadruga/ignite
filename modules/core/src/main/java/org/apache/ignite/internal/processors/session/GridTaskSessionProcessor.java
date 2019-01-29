@@ -121,6 +121,8 @@ public class GridTaskSessionProcessor extends GridProcessorAdapter {
         while (true) {
             GridTaskSessionImpl ses = sesMap.get(sesId);
 
+            System.out.println("-------------------------- SesId " + sesId);
+
             if (ses == null) {
                 GridTaskSessionImpl old = sesMap.putIfAbsent(
                     sesId,
@@ -142,17 +144,22 @@ public class GridTaskSessionProcessor extends GridProcessorAdapter {
                         subjId,
                         execName));
 
-                if (old != null)
-                    ses = old;
-                else
+                if (old != null) {
+                    System.out.println("ses = old");
+                    ses = old; }
+                else {
                     // Return without acquire.
-                    return ses;
+                    System.out.println("return ses");
+                    return ses; }
             }
 
-            if (ses.acquire())
+            if (ses.acquire()) {
+                System.out.println("ses.acquire() return");
                 return ses;
-            else
+            } else {
+                System.out.println("ses.acquire() remove");
                 sesMap.remove(sesId, ses);
+            }
         }
     }
 
@@ -173,14 +180,16 @@ public class GridTaskSessionProcessor extends GridProcessorAdapter {
     public boolean removeSession(IgniteUuid sesId) {
         GridTaskSessionImpl ses = sesMap.get(sesId);
 
+        System.out.print("-------------------------- SesId " + sesId + " remove ");
+
         assert ses == null || ses.isFullSupport();
 
         if (ses != null && ses.release()) {
             sesMap.remove(sesId, ses);
-
+            System.out.println("T");
             return true;
         }
-
+        System.out.println("F");
         return false;
     }
 

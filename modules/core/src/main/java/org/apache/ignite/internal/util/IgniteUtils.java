@@ -130,6 +130,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
@@ -285,6 +286,8 @@ import static org.apache.ignite.internal.util.GridUnsafe.staticFieldOffset;
  */
 @SuppressWarnings({"UnusedReturnValue", "RedundantStringConstructorCall"})
 public abstract class IgniteUtils {
+    public static final AtomicInteger STEP = new AtomicInteger();
+
     /** */
     private static final long GB = 1024L * 1024 * 1024;
 

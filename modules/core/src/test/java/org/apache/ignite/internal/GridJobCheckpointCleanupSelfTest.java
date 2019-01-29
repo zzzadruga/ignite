@@ -109,12 +109,14 @@ public class GridJobCheckpointCleanupSelfTest extends GridCommonAbstractTest {
 
         /** {@inheritDoc} */
         @Override public byte[] loadCheckpoint(String key) throws IgniteSpiException {
+            System.out.println("&&& LOAD CHECKPOINT");
             return null;
         }
 
         /** {@inheritDoc} */
         @Override public boolean saveCheckpoint(String key, byte[] state, long timeout, boolean overwrite)
             throws IgniteSpiException {
+
             System.out.println("&&& " + getName() + " cntr.incrementAndGet() " + cntr.incrementAndGet() + "; key " + key);
 
             return true;
