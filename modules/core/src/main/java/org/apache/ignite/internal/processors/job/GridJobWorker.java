@@ -53,6 +53,7 @@ import org.apache.ignite.internal.processors.query.GridQueryProcessor;
 import org.apache.ignite.internal.processors.service.GridServiceNotFoundException;
 import org.apache.ignite.internal.processors.task.GridInternal;
 import org.apache.ignite.internal.processors.timeout.GridTimeoutObject;
+import org.apache.ignite.internal.util.IgniteUtils;
 import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.internal.util.typedef.X;
 import org.apache.ignite.internal.util.typedef.internal.LT;
@@ -476,6 +477,8 @@ public class GridJobWorker extends GridWorker implements GridTimeoutObject {
 
     /** {@inheritDoc} */
     @Override protected void body() {
+        System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridJobWorker.body() jobId " + this.getJobId());
+
         assert job != null;
 
         startTime = U.currentTimeMillis();
@@ -504,6 +507,7 @@ public class GridJobWorker extends GridWorker implements GridTimeoutObject {
      */
     private void execute0(boolean skipNtf) {
         // Make sure flag is not set for current thread.
+        System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridJobWorker.exucute0() jobId " + this.getJobId());
         HOLD.set(false);
 
         try {
@@ -565,6 +569,7 @@ public class GridJobWorker extends GridWorker implements GridTimeoutObject {
                                 if (internal && ctx.config().isPeerClassLoadingEnabled())
                                     ctx.job().internal(true);
 
+                                System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridJobWorker.execute0() job.execute() ");
                                 return job.execute();
                             }
                             finally {
@@ -627,8 +632,11 @@ public class GridJobWorker extends GridWorker implements GridTimeoutObject {
             }
             finally {
                 // Finish here only if not held by this thread.
-                if (!HOLD.get())
+                if (!HOLD.get()) {
+                    System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridJobWorker.execute0() finishJob res = " + res);
+
                     finishJob(res, ex, sndRes);
+                }
                 else
                     // Make sure flag is not set for current thread.
                     // This may happen in case of nested internal task call with continuation.
@@ -790,6 +798,7 @@ public class GridJobWorker extends GridWorker implements GridTimeoutObject {
         boolean sndReply,
         boolean retry)
     {
+        System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridJobWorker.finishJob() res = " + res);
         // Avoid finishing a job more than once from different threads.
         if (!finishing.compareAndSet(false, true))
             return;
@@ -806,8 +815,10 @@ public class GridJobWorker extends GridWorker implements GridTimeoutObject {
         Collection<IgniteBiTuple<Integer, String>> evts = null;
 
         try {
-            if (ses.isFullSupport())
+            if (ses.isFullSupport()) {
+                System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridJobWorker.finishJob() evtLsnr.onBeforeJobResponseSent");
                 evtLsnr.onBeforeJobResponseSent(this);
+            }
 
             // Send response back only if job has not timed out.
             if (!isTimedOut()) {
@@ -919,6 +930,7 @@ public class GridJobWorker extends GridWorker implements GridTimeoutObject {
                                 // Send response to designated job topic.
                                 // Always go through communication to preserve order,
                                 // if attributes are enabled.
+                                System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridJobWorker.finishJob() sendOrderedMessage jobRes " + jobRes.getJobResult());
                                 ctx.io().sendOrderedMessage(
                                     sndNode,
                                     taskTopic,
@@ -988,6 +1000,7 @@ public class GridJobWorker extends GridWorker implements GridTimeoutObject {
                     recordEvent(t.get1(), t.get2());
             }
 
+            System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridJobWorker.finishJob() evtLsnr.onJobFinisheds");
             // Listener callback.
             evtLsnr.onJobFinished(this);
         }

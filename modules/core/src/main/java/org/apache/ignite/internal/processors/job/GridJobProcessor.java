@@ -74,6 +74,7 @@ import org.apache.ignite.internal.util.GridBoundedConcurrentLinkedHashMap;
 import org.apache.ignite.internal.util.GridBoundedConcurrentLinkedHashSet;
 import org.apache.ignite.internal.util.GridConcurrentHashSet;
 import org.apache.ignite.internal.util.GridSpinReadWriteLock;
+import org.apache.ignite.internal.util.IgniteUtils;
 import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.internal.util.typedef.P1;
 import org.apache.ignite.internal.util.typedef.X;
@@ -952,6 +953,7 @@ public class GridJobProcessor extends GridProcessorAdapter {
      */
     @SuppressWarnings("TooBroadScope")
     public void processJobExecuteRequest(ClusterNode node, final GridJobExecuteRequest req) {
+        System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridJobProcessor.processJobExecuteRequest nodeId " + node.id());
         if (log.isDebugEnabled())
             log.debug("Received job request message [req=" + req + ", nodeId=" + node.id() + ']');
 
@@ -1052,6 +1054,7 @@ public class GridJobProcessor extends GridProcessorAdapter {
                                 U.resolveClassLoader(dep.classLoader(), ctx.config()));
                         }
 
+                        System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridJobProcessor.processJobExecuteRequest ctx.session().createTaskSession sesId " + req.getSessionId());
                         // Note that we unmarshal session/job attributes here with proper class loader.
                         GridTaskSessionImpl taskSes = ctx.session().createTaskSession(
                             req.getSessionId(),
@@ -1095,6 +1098,7 @@ public class GridJobProcessor extends GridProcessorAdapter {
                         return;
                     }
 
+                    System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridJobProcessor.processJobExecuteRequest new GridJobWorker ");
                     job = new GridJobWorker(
                         ctx,
                         dep,
@@ -1187,8 +1191,10 @@ public class GridJobProcessor extends GridProcessorAdapter {
             rwLock.readUnlock();
         }
 
-        if (job != null)
+        if (job != null) {
+            System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridJobProcessor.processJobExecuteRequest job.run()");
             job.run();
+        }
     }
 
     /**
@@ -1925,6 +1931,7 @@ public class GridJobProcessor extends GridProcessorAdapter {
 
             assert node != null;
 
+            System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridJobProcessor.JobExecutionListener onMessage");
             processJobExecuteRequest(node, (GridJobExecuteRequest)msg);
         }
     }

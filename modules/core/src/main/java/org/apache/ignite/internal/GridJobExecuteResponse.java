@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.apache.ignite.IgniteException;
 import org.apache.ignite.internal.processors.affinity.AffinityTopologyVersion;
+import org.apache.ignite.internal.util.IgniteUtils;
 import org.apache.ignite.internal.util.tostring.GridToStringExclude;
 import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.lang.IgniteUuid;
@@ -115,6 +116,9 @@ public class GridJobExecuteResponse implements Message {
         assert nodeId != null;
         assert sesId != null;
         assert jobId != null;
+
+
+        System.out.println("%%%%%[" + IgniteUtils.STEP.incrementAndGet() + "] GridJobExecuteResponse new nodeId " + nodeId + "; sesId " + sesId + "; jobId " + jobId);
 
         this.nodeId = nodeId;
         this.sesId = sesId;

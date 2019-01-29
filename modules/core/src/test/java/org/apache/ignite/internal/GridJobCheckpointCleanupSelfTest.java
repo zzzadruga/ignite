@@ -30,6 +30,7 @@ import org.apache.ignite.compute.ComputeTaskAdapter;
 import org.apache.ignite.compute.ComputeTaskSession;
 import org.apache.ignite.compute.ComputeTaskSessionFullSupport;
 import org.apache.ignite.configuration.IgniteConfiguration;
+import org.apache.ignite.internal.util.IgniteUtils;
 import org.apache.ignite.resources.TaskSessionResource;
 import org.apache.ignite.spi.IgniteSpiAdapter;
 import org.apache.ignite.spi.IgniteSpiException;
@@ -71,6 +72,8 @@ public class GridJobCheckpointCleanupSelfTest extends GridCommonAbstractTest {
     @Test
     public void testCheckpointCleanup() throws Exception {
         try {
+            IgniteUtils.STEP.set(0);
+
             checkpointSpi = new TestCheckpointSpi("task-checkpoints", cntr);
 
             Ignite taskIgnite = startGrid(0);
