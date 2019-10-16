@@ -32,6 +32,7 @@ import org.apache.ignite.events.CheckpointEvent;
 import org.apache.ignite.internal.GridKernalContext;
 import org.apache.ignite.internal.GridTaskSessionImpl;
 import org.apache.ignite.internal.GridTaskSessionInternal;
+import org.apache.ignite.internal.IgniteInterruptedCheckedException;
 import org.apache.ignite.internal.SkipDaemon;
 import org.apache.ignite.internal.managers.GridManagerAdapter;
 import org.apache.ignite.internal.managers.communication.GridIoManager;
@@ -39,6 +40,7 @@ import org.apache.ignite.internal.managers.communication.GridIoPolicy;
 import org.apache.ignite.internal.managers.communication.GridMessageListener;
 import org.apache.ignite.internal.util.GridBoundedConcurrentLinkedHashSet;
 import org.apache.ignite.internal.util.GridConcurrentHashSet;
+import org.apache.ignite.internal.util.GridSetWrapper;
 import org.apache.ignite.internal.util.tostring.GridToStringInclude;
 import org.apache.ignite.internal.util.typedef.X;
 import org.apache.ignite.internal.util.typedef.internal.S;
@@ -126,8 +128,10 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
 
         GridIoManager comm = ctx.io();
 
-        if (comm != null)
+        if (comm != null) {
+            System.out.println("[130] >>>>>>>>>>>>>>>>>>>>>> [STOP] удаление лисенера | " + U.currentTimeMillis());
             comm.removeMessageListener(TOPIC_CHECKPOINT, lsnr);
+        }
 
         stopSpi();
 
@@ -176,6 +180,7 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
                     byte[] data = state == null ? null : U.marshal(marsh, state);
 
                     saved = getSpi(ses.getCheckpointSpi()).saveCheckpoint(key, data, timeout, override);
+                    System.out.println("[181] >>>>>>>>>>>>>>>>>>>>>> [SC]" + (saved ? "" : " не ") + " сохранен чекпоинт | " + U.currentTimeMillis());
 
                     if (saved)
                         record(EVT_CHECKPOINT_SAVED, key);
@@ -211,6 +216,7 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
                     Set<String> keys = keyMap.get(ses.getId());
 
                     if (keys == null) {
+                        System.out.println("[217] >>>>>>>>>>>>>>>>>>>>>> [SC] в кеймап создается пустой сет для " + ses.getId() + " | " + U.currentTimeMillis());
                         Set<String> old = keyMap.putIfAbsent(ses.getId(),
                             (CheckpointSet)(keys = new CheckpointSet(ses.session())));
 
@@ -224,6 +230,7 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
                                 "val", state, true,
                                 "ses", ses, false));
 
+                            System.out.println("[231] >>>>>>>>>>>>>>>>>>>>>> [SC] closedSess содержит сессию, удаляем из keyMap " + ((CheckpointSet)keys).map.keySet() + "| " + U.currentTimeMillis());
                             keyMap.remove(ses.getId(), keys);
 
                             break;
@@ -249,12 +256,15 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
                                     TOPIC_CHECKPOINT,
                                     new GridCheckpointRequest(ses.getId(), key, ses.getCheckpointSpi()),
                                     GridIoPolicy.PUBLIC_POOL);
+                            System.out.println("[257] >>>>>>>>>>>>>>>>>>>>>> [SC] отправляем сообщение ТОПИК_ЧЕКПОИНТ 255 | " + U.currentTimeMillis());
                         }
 
                         saved = getSpi(ses.getCheckpointSpi()).saveCheckpoint(key, data, timeout, override);
+                        System.out.println("[260] >>>>>>>>>>>>>>>>>>>>>> [SC] " + (saved ? "" : " не ") + "сохраняем чекпоинт | " + U.currentTimeMillis());
 
                         if (saved) {
                             keys.add(key);
+                            System.out.println("[265] >>>>>>>>>>>>>>>>>>>>>> [SC] добавляем " + key + " в ключи сессии в keyMap. Стало" + ((CheckpointSet)keys).map.keySet() + " | " + U.currentTimeMillis());
 
                             record(EVT_CHECKPOINT_SAVED, key);
                         }
@@ -292,6 +302,7 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
 
         for (CheckpointSpi spi : getSpis())
             if (spi.removeCheckpoint(key))
+                System.out.println("[301] >>>>>>>>>>>>>>>>>>>>>> [RC] удаляем чекпоинт | " + U.currentTimeMillis());
                 rmv = true;
 
         return rmv;
@@ -319,6 +330,7 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
             keys.remove(key);
 
             rmv = getSpi(ses.getCheckpointSpi()).removeCheckpoint(key);
+            System.out.println("[301] >>>>>>>>>>>>>>>>>>>>>> [RC] " + (rmv ? "" : " не ") + " удаляем чекпоинт | " + U.currentTimeMillis());
         }
         else if (log.isDebugEnabled())
             log.debug(S.toString("Checkpoint will not be removed (key map not found)",
@@ -368,16 +380,26 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
             return;
 
         closedSess.add(ses.getId());
-
+        System.out.println("[381] >>>>>>>>>>>>>>>>>>>>>> [OSE] " + ((ses.getJobId() != null) ? "{JOB}" : "{TASK}") + " добавляем сессию в closedSess | " + U.currentTimeMillis());
         // If on task node.
         if (ses.getJobId() == null) {
+            System.out.println("[384] >>>>>>>>>>>>>>>>>>>>>> [OSE] {TASK} на ноде удаляем из кеймап [BEFORE] keyMap: " + (keyMap.get(ses.getId()) != null ? keyMap.get(ses.getId()).map.keySet() : " null") + " | " + U.currentTimeMillis());
             Set<String> keys = keyMap.remove(ses.getId());
 
+            System.out.println("[386] >>>>>>>>>>>>>>>>>>>>>> [OSE] {TASK} на ноде после удаления из кеймап  [AFTER] keyMap: " +
+                (keyMap.get(ses.getId()) != null ? keyMap.get(ses.getId()).map.keySet() : " null")  + "; удаленные ключи: " +
+                (keys != null ? ((CheckpointSet)keys).map.keySet() : "null") + " | " + U.currentTimeMillis());
+
             if (keys != null) {
-                for (String key : keys)
-                    getSpi(ses.getCheckpointSpi()).removeCheckpoint(key);
+                System.out.println("[389] >>>>>>>>>>>>>>>>>>>>>> [OSE] {TASK} Готовимcя пройти по удаленным ключам и удалить чекпоинты" + (keys.isEmpty() ? ". А их нет" : ". их " + keys.size()));
+                for (String key : keys) {
+                    boolean rmv = getSpi(ses.getCheckpointSpi()).removeCheckpoint(key);
+                    System.out.println("[392] >>>>>>>>>>>>>>>>>>>>>> [OSE] {TASK} чекпоинт "  + (rmv ? "" : " не ") + "удален | " + U.currentTimeMillis());
+                }
             }
         }
+
+
         // If on job node.
         else if (cleanup) {
             // Clean up memory.
@@ -385,8 +407,13 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
 
             // Make sure that we don't remove checkpoint set that
             // was created by newly created session.
-            if (keys != null && keys.session() == ses.session())
+            if (keys != null && keys.session() == ses.session()) {
+                System.out.println("[404] >>>>>>>>>>>>>>>>>>>>>> [OSE] {JOB} на ноде удаляем из кеймап [BEFORE] keyMap: "
+                    + (keyMap.get(ses.getId()) != null ? keyMap.get(ses.getId()).map.keySet() : " null") + " | " + U.currentTimeMillis());
                 keyMap.remove(ses.getId(), keys);
+                System.out.println("[407] >>>>>>>>>>>>>>>>>>>>>> [OSE] {JOB} на ноде после удаления из кеймап[AFTER] keyMap: " +
+                    (keyMap.get(ses.getId()) != null ? keyMap.get(ses.getId()).map.keySet() : " null") + " | " + U.currentTimeMillis());
+            }
         }
     }
 
@@ -461,6 +488,7 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
          * @param msg Received message.
          */
         @Override public void onMessage(UUID nodeId, Object msg, byte plc) {
+            System.out.println("[486] >>>>>>>>>>>>>>>>>>>>>> [CRL] лисенер поймал топик | " + U.currentTimeMillis());
             GridCheckpointRequest req = (GridCheckpointRequest)msg;
 
             if (log.isDebugEnabled())
@@ -471,36 +499,57 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
 
             IgniteUuid sesId = req.getSessionId();
 
-            if (closedSess.contains(sesId)) {
-                getSpi(req.getCheckpointSpi()).removeCheckpoint(req.getKey());
-
+            boolean contains = closedSess.contains(sesId);
+            System.out.println("[498] >>>>>>>>>>>>>>>>>>>>>> [CRL] в closedSess " + (contains ? "" : "не ") + " находится сессия | " + U.currentTimeMillis());
+            if (contains) {
+                boolean rmv = getSpi(req.getCheckpointSpi()).removeCheckpoint(req.getKey());
+                System.out.println("[501] >>>>>>>>>>>>>>>>>>>>>> [CRL] " + (rmv ? "" : "не") + " удаляем чекпоинт | " + U.currentTimeMillis());
                 return;
             }
 
             Set<String> keys = keyMap.get(sesId);
 
+            System.out.println("[507] >>>>>>>>>>>>>>>>>>>>>> [CRL] получаем список ключей из кеймап, keyMap: " + (keyMap.get(sesId) != null ? keyMap.get(sesId).map.keySet() : " null") + " | " + U.currentTimeMillis());
+
             if (keys == null) {
+                System.out.println("[510] >>>>>>>>>>>>>>>>>>>>>> [CRL] ключей null | " + U.currentTimeMillis());
                 GridTaskSessionImpl ses = ctx.session().getSession(sesId);
 
                 if (ses == null) {
-                    getSpi(req.getCheckpointSpi()).removeCheckpoint(req.getKey());
+                    boolean rmv = getSpi(req.getCheckpointSpi()).removeCheckpoint(req.getKey());
+
+                    System.out.println("[514] >>>>>>>>>>>>>>>>>>>>>> [CRL] если сессия null," + (rmv ? "" : "не") + " удаляем чекпоинт | " + U.currentTimeMillis());
 
                     return;
                 }
 
+                System.out.println("[521] >>>>>>>>>>>>>>>>>>>>>> [CRL] создаем пустой набор ключей для сессии " + sesId + " | " + U.currentTimeMillis());
                 Set<String> old = keyMap.putIfAbsent(sesId, (CheckpointSet)(keys = new CheckpointSet(ses)));
 
-                if (old != null)
+                if (old != null) {
+                    System.out.println("[525] >>>>>>>>>>>>>>>>>>>>>> [CRL] за время со строки [514] в keyMap появились запись по сесии "  + sesId + ", помещаем в keys старую запись. | " + U.currentTimeMillis());
                     keys = old;
+                }
             }
 
             keys.add(req.getKey());
 
-            // Double check.
-            if (closedSess.contains(sesId)) {
-                keyMap.remove(sesId, keys);
+            System.out.println("[532] >>>>>>>>>>>>>>>>>>>>>> [CRL] добавляем в keys ключ из запроса - " + req.getKey() + "; теперь в ключах: " + ((CheckpointSet)keys).map.keySet() + " | " + U.currentTimeMillis());
 
-                getSpi(req.getCheckpointSpi()).removeCheckpoint(req.getKey());
+
+            // Double check.
+            contains = closedSess.contains(sesId);
+            System.out.println("[536] >>>>>>>>>>>>>>>>>>>>>> [CRL] closedSess " + (contains ? "" : "не ") + "содеpжит сессию | " + U.currentTimeMillis());
+            if (contains) {
+                System.out.println("[538] >>>>>>>>>>>>>>>>>>>>>> [CRL] keyMap: " + (keyMap.get(sesId) != null ? keyMap.get(sesId).map.keySet() : " null") + "; keys: " + ((CheckpointSet)keys).map.keySet() + " |" + U.currentTimeMillis());
+                System.out.println("[539] >>>>>>>>>>>>>>>>>>>>>> [CRL] удаляем из keyMap ключи |" + U.currentTimeMillis());
+
+                boolean removed = keyMap.remove(sesId, keys);
+
+                //if (removed) {
+                    boolean rmv = getSpi(req.getCheckpointSpi()).removeCheckpoint(req.getKey());
+                    System.out.println("[544] >>>>>>>>>>>>>>>>>>>>>> [CRL] " + (rmv ? "" : "не") + " удаляем чекпоинт |" + U.currentTimeMillis());
+                //}
             }
         }
     }

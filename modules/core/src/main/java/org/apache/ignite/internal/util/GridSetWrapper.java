@@ -36,7 +36,7 @@ public class GridSetWrapper<E> extends GridSerializableSet<E> {
 
     /** Base map. */
     @GridToStringExclude
-    protected Map<E, Object> map;
+    public Map<E, Object> map;
 
     /**
      * Creates new set based on the given map.
