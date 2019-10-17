@@ -21,6 +21,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -383,7 +384,7 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
         System.out.println("[381] >>>>>>>>>>>>>>>>>>>>>> [OSE] " + ((ses.getJobId() != null) ? "{JOB}" : "{TASK}") + " добавляем сессию в closedSess | " + U.currentTimeMillis());
         // If on task node.
         if (ses.getJobId() == null) {
-            System.out.println("[384] >>>>>>>>>>>>>>>>>>>>>> [OSE] {TASK} на ноде удаляем из кеймап [BEFORE] keyMap: " + (keyMap.get(ses.getId()) != null ? keyMap.get(ses.getId()).map.keySet() : " null") + " | " + U.currentTimeMillis());
+/*            System.out.println("[384] >>>>>>>>>>>>>>>>>>>>>> [OSE] {TASK} на ноде удаляем из кеймап [BEFORE] keyMap: " + (keyMap.get(ses.getId()) != null ? keyMap.get(ses.getId()).map.keySet() : " null") + " | " + U.currentTimeMillis());
             Set<String> keys = keyMap.remove(ses.getId());
 
             System.out.println("[386] >>>>>>>>>>>>>>>>>>>>>> [OSE] {TASK} на ноде после удаления из кеймап  [AFTER] keyMap: " +
@@ -396,7 +397,20 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
                     boolean rmv = getSpi(ses.getCheckpointSpi()).removeCheckpoint(key);
                     System.out.println("[392] >>>>>>>>>>>>>>>>>>>>>> [OSE] {TASK} чекпоинт "  + (rmv ? "" : " не ") + "удален | " + U.currentTimeMillis());
                 }
-            }
+            }*/
+
+            keyMap.computeIfPresent(ses.getId(), (key, value) -> {
+                System.out.println("[389] >>>>>>>>>>>>>>>>>>>>>> [OSE] {TASK} Готовимcя пройти по удаленным ключам и удалить чекпоинты " + (value.isEmpty() ? ". А их нет" : ". их " + value));
+                Iterator itr = value.iterator();
+                while(itr.hasNext()) {
+                    String str;
+                    getSpi(ses.getCheckpointSpi()).removeCheckpoint(str = (String)itr.next());
+                    System.out.println("[392] >>>>>>>>>>>>>>>>>>>>>> [OSE] {TASK} чекпоинт " + str + " удален | " + U.currentTimeMillis());
+                    itr.remove();
+                }
+
+                return value.isEmpty() ? null : value;
+            });
         }
 
 
@@ -516,34 +530,34 @@ public class GridCheckpointManager extends GridManagerAdapter<CheckpointSpi> {
                 return;
             }
 
-            Set<String> keys = keyMap.computeIfAbsent(sesId, key -> {
-                System.out.println("[521] >>>>>>>>>>>>>>>>>>>>>> [CRL] создаем пустой набор ключей для сессии " + sesId + " и кладем ключ из запроса | " + U.currentTimeMillis());
-                CheckpointSet set = new CheckpointSet(ses);
-                set.add(req.getKey());
+            keyMap.compute(sesId, (key, value) -> {
+                if (value == null)
+                    value = new CheckpointSet(ses);
 
-                return set;
+                value.add(req.getKey());
+
+                return value;
             });
-
-            System.out.println("[532] >>>>>>>>>>>>>>>>>>>>>> [CRL] добавляем в keys ключ из запроса - " + req.getKey() + "; теперь в ключах: " + ((CheckpointSet)keys).map.keySet() + " | " + U.currentTimeMillis());
-
-            keys.add(req.getKey());
-
-            System.out.println("[507] >>>>>>>>>>>>>>>>>>>>>> [CRL] получаем список ключей из кеймап, keyMap: " + (keyMap.get(sesId) != null ? keyMap.get(sesId).map.keySet() : " null") + " | " + U.currentTimeMillis());
-
 
             // Double check.
             contains = closedSess.contains(sesId);
             System.out.println("[536] >>>>>>>>>>>>>>>>>>>>>> [CRL] closedSess " + (contains ? "" : "не ") + "содеpжит сессию | " + U.currentTimeMillis());
             if (contains) {
-                System.out.println("[538] >>>>>>>>>>>>>>>>>>>>>> [CRL] keyMap: " + (keyMap.get(sesId) != null ? keyMap.get(sesId).map.keySet() : " null") + "; keys: " + ((CheckpointSet)keys).map.keySet() + " |" + U.currentTimeMillis());
+                //System.out.println("[538] >>>>>>>>>>>>>>>>>>>>>> [CRL] keyMap: " + (keyMap.get(sesId) != null ? keyMap.get(sesId).map.keySet() : " null") + "; keys: " + ((CheckpointSet)keys).map.keySet() + " |" + U.currentTimeMillis());
                 System.out.println("[539] >>>>>>>>>>>>>>>>>>>>>> [CRL] удаляем из keyMap ключи |" + U.currentTimeMillis());
 
-                boolean removed = keyMap.remove(sesId, keys);
 
-                if (removed) {
-                    boolean rmv = getSpi(req.getCheckpointSpi()).removeCheckpoint(req.getKey());
-                    System.out.println("[544] >>>>>>>>>>>>>>>>>>>>>> [CRL] " + (rmv ? "" : "не") + " удаляем чекпоинт |" + U.currentTimeMillis());
-                }
+                keyMap.computeIfPresent(ses.getId(), (key, value) -> {
+                    Iterator itr = value.iterator();
+                    while (itr.hasNext()) {
+                        String str;
+                        getSpi(ses.getCheckpointSpi()).removeCheckpoint(str = (String)itr.next());
+                        System.out.println("[539] >>>>>>>>>>>>>>>>>>>>>> [CRL] удаляем чекпоинт " + str + " | " + U.currentTimeMillis());
+                        itr.remove();
+                    }
+
+                    return value.isEmpty() ? null : value;
+                });
             }
         }
     }

@@ -155,8 +155,9 @@ public class GridJobCheckpointCleanupSelfTest extends GridCommonAbstractTest {
                         private ComputeTaskSession ses;
 
                         @Nullable @Override public Object execute() {
-                            ses.saveCheckpoint("checkpoint-key", "checkpoint-value");
-
+                            ses.saveCheckpoint("checkpoint-key1", "checkpoint-value");
+                            ses.saveCheckpoint("checkpoint-key2", "checkpoint-value");
+                            ses.saveCheckpoint("checkpoint-key3", "checkpoint-value");
                             return null;
                         }
                     }, node);
