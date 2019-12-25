@@ -17,9 +17,12 @@
 
 package org.apache.ignite.internal.processors.cache;
 
+import com.google.common.collect.Lists;
 import java.util.Collections;
+import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
@@ -28,25 +31,36 @@ import org.apache.ignite.cache.CacheAtomicityMode;
 import org.apache.ignite.cache.CacheMetrics;
 import org.apache.ignite.cache.CacheMode;
 import org.apache.ignite.cache.CacheRebalanceMode;
+import org.apache.ignite.cache.affinity.rendezvous.RendezvousAffinityFunction;
+import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.configuration.CacheConfiguration;
 import org.apache.ignite.configuration.IgniteConfiguration;
 import org.apache.ignite.events.CacheRebalancingEvent;
 import org.apache.ignite.events.Event;
 import org.apache.ignite.events.EventType;
 import org.apache.ignite.internal.IgniteEx;
+import org.apache.ignite.internal.TestRecordingCommunicationSpi;
+import org.apache.ignite.internal.processors.cache.distributed.dht.preloader.GridDhtPartitionSupplyMessage;
+import org.apache.ignite.internal.processors.metric.MetricRegistry;
 import org.apache.ignite.internal.util.lang.GridAbsPredicate;
 import org.apache.ignite.internal.util.typedef.PA;
+import org.apache.ignite.internal.util.typedef.internal.CU;
 import org.apache.ignite.internal.util.typedef.internal.U;
 import org.apache.ignite.internal.visor.VisorTaskArgument;
 import org.apache.ignite.internal.visor.node.VisorNodeDataCollectorTask;
 import org.apache.ignite.internal.visor.node.VisorNodeDataCollectorTaskArg;
 import org.apache.ignite.internal.visor.node.VisorNodeDataCollectorTaskResult;
+import org.apache.ignite.lang.IgniteBiPredicate;
 import org.apache.ignite.lang.IgnitePredicate;
+import org.apache.ignite.plugin.extensions.communication.Message;
+import org.apache.ignite.spi.metric.LongMetric;
 import org.apache.ignite.testframework.GridTestUtils;
 import org.apache.ignite.testframework.junits.common.GridCommonAbstractTest;
 import org.junit.Test;
 
 import static org.apache.ignite.IgniteSystemProperties.IGNITE_REBALANCE_STATISTICS_TIME_INTERVAL;
+import static org.apache.ignite.internal.processors.cache.CacheGroupMetricsImpl.CACHE_GROUP_METRICS_PREFIX;
+import static org.apache.ignite.internal.processors.metric.impl.MetricUtils.metricName;
 import static org.apache.ignite.testframework.GridTestUtils.runAsync;
 import static org.apache.ignite.testframework.GridTestUtils.waitForCondition;
 
@@ -64,10 +78,22 @@ public class CacheGroupsMetricsRebalanceTest extends GridCommonAbstractTest {
     private static final String CACHE3 = "cache3";
 
     /** */
+    private static final String CACHE4 = "cache4";
+
+    /** */
+    private static final String CACHE5 = "cache5";
+
+    /** */
     private static final long REBALANCE_DELAY = 5_000;
 
     /** */
     private static final String GROUP = "group1";
+
+    /** */
+    private static final String GROUP2 = "group2";
+
+    /** */
+    private static final int KEYS_COUNT = 10_000;
 
     /** {@inheritDoc} */
     @Override protected void afterTest() throws Exception {
@@ -85,6 +111,7 @@ public class CacheGroupsMetricsRebalanceTest extends GridCommonAbstractTest {
     @SuppressWarnings("unchecked")
     @Override protected IgniteConfiguration getConfiguration(String igniteInstanceName) throws Exception {
         IgniteConfiguration cfg = super.getConfiguration(igniteInstanceName);
+/*
 
         CacheConfiguration cfg1 = new CacheConfiguration()
             .setName(CACHE1)
@@ -106,10 +133,23 @@ public class CacheGroupsMetricsRebalanceTest extends GridCommonAbstractTest {
             .setRebalanceBatchSize(100)
             .setStatisticsEnabled(true)
             .setRebalanceDelay(REBALANCE_DELAY);
+*/
 
-        cfg.setCacheConfiguration(cfg1, cfg2, cfg3);
+        CacheConfiguration cfg4 = new CacheConfiguration()
+            .setAffinity(new RendezvousAffinityFunction(false, 12))
+            .setRebalanceMode(CacheRebalanceMode.ASYNC)
+            .setName(CACHE4)
+            .setCacheMode(CacheMode.REPLICATED)
+            .setGroupName(GROUP2);
+
+        CacheConfiguration cfg5 = new CacheConfiguration(cfg4)
+            .setName(CACHE5);
+
+        cfg.setCacheConfiguration(/*cfg1, cfg2, cfg3,*/ cfg4, cfg5);
 
         cfg.setIncludeEventTypes(EventType.EVTS_ALL);
+
+        cfg.setCommunicationSpi(new TestRecordingCommunicationSpi());
 
         return cfg;
     }
@@ -237,6 +277,57 @@ public class CacheGroupsMetricsRebalanceTest extends GridCommonAbstractTest {
                     && snapshot.getRebalancingPartitionsCount() == 0;
             }
         }, 5000);
+    }
+
+    @Test
+    public void testRebalancing() throws Exception {
+        IgniteEx ignite0 = startGrid(0);
+
+        List<String> cacheNames = Lists.newArrayList(CACHE4, CACHE5);
+
+        for (String cacheName : cacheNames) {
+            IgniteCache<Integer, Long> cache = ignite0.getOrCreateCache(cacheName);
+
+            for (int i = 0; i < 10; i++) {
+                cache.put(ThreadLocalRandom.current().nextInt(), ThreadLocalRandom.current().nextLong());
+            }
+        }
+
+        TestRecordingCommunicationSpi.spi(ignite0)
+            .blockMessages(new IgniteBiPredicate<ClusterNode, Message>() {
+                @Override public boolean apply(ClusterNode node, Message msg) {
+                    return (msg instanceof GridDhtPartitionSupplyMessage) &&
+                        CU.cacheId(GROUP2) == ((GridCacheGroupIdMessage)msg).groupId();
+                }
+            });
+
+        IgniteEx ignite1 = startGrid(1);
+
+        TestRecordingCommunicationSpi.spi(ignite0).waitForBlocked();
+
+        for (IgniteEx ignite : Lists.newArrayList(ignite0, ignite1)) {
+            MetricRegistry mreg = ignite.context().metric()
+                .registry(metricName(CACHE_GROUP_METRICS_PREFIX, GROUP2));
+
+            LongMetric expectedKeys = mreg.findMetric("RebalancingExpectedKeys");
+            LongMetric expectedBytes = mreg.findMetric("RebalancingExpectedBytes");
+            LongMetric evictedPartitionsLeft = mreg.findMetric("RebalancingEvictedPartitionsLeft");
+
+        }
+        TestRecordingCommunicationSpi.spi(ignite0).stopBlock();
+
+        for (int i = 0; i < 100; i++) {
+            for (IgniteEx ignite : Lists.newArrayList(ignite0, ignite1)) {
+                MetricRegistry mreg = ignite.context().metric()
+                    .registry(metricName(CACHE_GROUP_METRICS_PREFIX, GROUP2));
+
+                LongMetric expectedKeys = mreg.findMetric("RebalancingExpectedKeys");
+                LongMetric expectedBytes = mreg.findMetric("RebalancingExpectedBytes");
+                LongMetric evictedPartitionsLeft = mreg.findMetric("RebalancingEvictedPartitionsLeft");
+
+            }
+            TimeUnit.MILLISECONDS.sleep(100);
+        }
     }
 
     /**

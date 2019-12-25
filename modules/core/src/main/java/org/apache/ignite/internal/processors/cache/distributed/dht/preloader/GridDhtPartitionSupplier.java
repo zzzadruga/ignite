@@ -46,6 +46,8 @@ import org.apache.ignite.internal.processors.cache.mvcc.MvccUtils;
 import org.apache.ignite.internal.processors.cache.mvcc.MvccVersionAware;
 import org.apache.ignite.internal.processors.cache.mvcc.txlog.TxState;
 import org.apache.ignite.internal.processors.cache.persistence.CacheDataRow;
+import org.apache.ignite.internal.processors.metric.MetricRegistry;
+import org.apache.ignite.internal.processors.metric.impl.AtomicLongMetric;
 import org.apache.ignite.internal.util.tostring.GridToStringExclude;
 import org.apache.ignite.internal.util.typedef.T3;
 import org.apache.ignite.internal.util.typedef.internal.LT;
@@ -55,7 +57,9 @@ import org.apache.ignite.spi.IgniteSpiException;
 
 import static org.apache.ignite.events.EventType.EVT_CACHE_REBALANCE_PART_MISSED;
 import static org.apache.ignite.events.EventType.EVT_CACHE_REBALANCE_PART_SUPPLIED;
+import static org.apache.ignite.internal.processors.cache.CacheGroupMetricsImpl.CACHE_GROUP_METRICS_PREFIX;
 import static org.apache.ignite.internal.processors.cache.distributed.dht.topology.GridDhtPartitionState.OWNING;
+import static org.apache.ignite.internal.processors.metric.impl.MetricUtils.metricName;
 
 /**
  * Class for supplying partitions to demanding nodes.
@@ -81,6 +85,12 @@ class GridDhtPartitionSupplier {
     private long rebalanceThrottleOverride =
         IgniteSystemProperties.getLong(IgniteSystemProperties.IGNITE_REBALANCE_THROTTLE_OVERRIDE, 0);
 
+    private final AtomicLongMetric expectedKeys;
+
+    private final AtomicLongMetric expectedBytes;
+
+    private final AtomicLongMetric evictedPartitionsLeft;
+
     /**
      * @param grp Cache group.
      */
@@ -95,6 +105,19 @@ class GridDhtPartitionSupplier {
 
         if (rebalanceThrottleOverride > 0)
             LT.info(log, "Using rebalance throttle override: " + rebalanceThrottleOverride);
+
+        String metricGroupName = metricName(CACHE_GROUP_METRICS_PREFIX, grp.cacheOrGroupName());
+
+        MetricRegistry mreg = grp.shared().kernalContext().metric().registry(metricGroupName);
+
+        expectedKeys = mreg.longMetric("RebalancingExpectedKeys",
+            "Description rebalancingExpectedKeys");
+
+        expectedBytes = mreg.longMetric("RebalancingExpectedBytes",
+            "Description rebalancingExpectedBytes");
+
+        evictedPartitionsLeft = mreg.longMetric("RebalancingEvictedPartitionsLeft",
+            "Description rebalancingEvictedPartitionsLeft");
     }
 
     /**
@@ -179,9 +202,12 @@ class GridDhtPartitionSupplier {
 
         T3<UUID, Integer, AffinityTopologyVersion> contextId = new T3<>(nodeId, topicId, demandMsg.topologyVersion());
 
+        // сообщение от демандера с отрицательным ребалансИд означает удаление контекста. На той стороне ребалансФьюча завершилась
         if (demandMsg.rebalanceId() < 0) { // Demand node requested context cleanup.
             synchronized (scMap) {
                 SupplyContext sctx = scMap.get(contextId);
+
+                evictedPartitionsLeft.value(0);
 
                 if (sctx != null && sctx.rebalanceId == -demandMsg.rebalanceId()) {
                     clearContext(scMap.remove(contextId), log);
@@ -202,6 +228,7 @@ class GridDhtPartitionSupplier {
 
         ClusterNode demanderNode = grp.shared().discovery().node(nodeId);
 
+        // нода, запросившая данные, зажмурилась
         if (demanderNode == null) {
             if (log.isDebugEnabled())
                 log.debug("Demand message rejected (demander left cluster) ["
@@ -218,6 +245,7 @@ class GridDhtPartitionSupplier {
             synchronized (scMap) {
                 sctx = scMap.remove(contextId);
 
+                //присланное сообщение старое
                 if (sctx != null && demandMsg.rebalanceId() < sctx.rebalanceId) {
                     // Stale message, return context back and return.
                     scMap.put(contextId, sctx);
@@ -230,6 +258,7 @@ class GridDhtPartitionSupplier {
                 }
             }
 
+            // Присланное сообщение не содержит номеров партиций, и контекст тоже пустой
             // Demand request should not contain empty partitions if no supply context is associated with it.
             if (sctx == null && (demandMsg.partitions() == null || demandMsg.partitions().isEmpty())) {
                 if (log.isDebugEnabled())
@@ -239,15 +268,18 @@ class GridDhtPartitionSupplier {
                 return;
             }
 
+            // можем начинать
             if (log.isDebugEnabled())
                 log.debug("Demand message accepted ["
                     + supplyRoutineInfo(topicId, nodeId, demandMsg) + "]");
 
             assert !(sctx != null && !demandMsg.partitions().isEmpty());
 
+            // счиитаем максимальное количество батчей
             long maxBatchesCnt = /* Each thread should gain prefetched batches. */
                 grp.preloader().batchesPrefetchCount() * grp.shared().gridConfig().getRebalanceThreadPoolSize();
 
+             // Если в контексте пусто, работаем. Если нет, то количество максмальных батчей снижаем до одного - нам нужно отправить только остатки
             if (sctx == null) {
                 if (log.isDebugEnabled())
                     log.debug("Starting supplying rebalancing [" + supplyRoutineInfo(topicId, nodeId, demandMsg) +
@@ -257,6 +289,7 @@ class GridDhtPartitionSupplier {
             else
                 maxBatchesCnt = 1;
 
+            // готовим сообщение
             GridDhtPartitionSupplyMessage supplyMsg = new GridDhtPartitionSupplyMessage(
                 demandMsg.rebalanceId(),
                 grp.groupId(),
@@ -264,8 +297,9 @@ class GridDhtPartitionSupplier {
                 grp.deploymentEnabled()
             );
 
+            // считаем партиции, которые осталось перекинуть
             Set<Integer> remainingParts;
-
+            // Если у нас нет контекста, то начинаем собирать данные
             if (sctx == null || sctx.iterator == null) {
                 iter = grp.offheap().rebalanceIterator(demandMsg.partitions(), demandMsg.topologyVersion());
 
@@ -285,8 +319,14 @@ class GridDhtPartitionSupplier {
 
                     GridDhtLocalPartition loc = top.localPartition(part, demandMsg.topologyVersion(), false);
 
+                    System.out.println(">>>>>>>>>>>>>> part " + part);
+                    System.out.println(">>>>>>>>>>>>>> ldfs " + loc.dataStore().fullSize());
+                    System.out.println(">>>>>>>>>>>>>> lfs " + loc.fullSize());
+
                     assert loc != null && loc.state() == GridDhtPartitionState.OWNING
                         : "Partition should be in OWNING state: " + loc;
+
+                    expectedKeys.add(grp.offheap().totalPartitionEntriesCount(part));
 
                     supplyMsg.addEstimatedKeysCount(grp.offheap().totalPartitionEntriesCount(part));
                 }
@@ -297,6 +337,8 @@ class GridDhtPartitionSupplier {
                     if (iter.isPartitionMissing(p))
                         continue;
 
+                    expectedKeys.add(histMap.updateCounterAt(i) - histMap.initialUpdateCounterAt(i));
+
                     supplyMsg.addEstimatedKeysCount(histMap.updateCounterAt(i) - histMap.initialUpdateCounterAt(i));
                 }
             }
@@ -306,12 +348,15 @@ class GridDhtPartitionSupplier {
                 remainingParts = sctx.remainingParts;
             }
 
+            evictedPartitionsLeft.value(remainingParts.size());
+
             final int msgMaxSize = grp.preloader().batchSize();
 
             long batchesCnt = 0;
 
             CacheDataRow prevRow = null;
 
+            // Итерируемся либо по данным в офхипе, либо по данным контекста
             while (iter.hasNext()) {
                 CacheDataRow row = iter.peek();
 
@@ -320,22 +365,28 @@ class GridDhtPartitionSupplier {
                     prevRow != null && ((grp.sharedGroup() && row.cacheId() != prevRow.cacheId()) ||
                         !row.key().equals(prevRow.key()));
 
+                // Если не мвсс и размер сообщения превышает минимальный
                 if (canFlushHistory && supplyMsg.messageSize() >= msgMaxSize) {
+                    // И количество максимальныз батчей больше или равно максимальному
                     if (++batchesCnt >= maxBatchesCnt) {
+                        // То сохраняем контекст
                         saveSupplyContext(contextId,
                             iter,
                             remainingParts,
                             demandMsg.rebalanceId()
                         );
 
+                        // И отправляем ответку
                         reply(topicId, demanderNode, demandMsg, supplyMsg, contextId);
 
                         return;
                     }
                     else {
+                        // В противном случае отправляем. И если отправилось с ошибкой, заверщаем метод
                         if (!reply(topicId, demanderNode, demandMsg, supplyMsg, contextId))
                             return;
 
+                        // Создаем новое сообщение
                         supplyMsg = new GridDhtPartitionSupplyMessage(demandMsg.rebalanceId(),
                             grp.groupId(),
                             demandMsg.topologyVersion(),
@@ -354,10 +405,13 @@ class GridDhtPartitionSupplier {
                 assert (loc != null && loc.state() == OWNING && loc.reservations() > 0) || iter.isPartitionMissing(part)
                     : "Partition should be in OWNING state and has at least 1 reservation " + loc;
 
+                // Если партиция отсутсвиует и в итераторе (конктекст или офхип память), и в массиве, то считаем ее потерянной и удаляем из массива
                 if (iter.isPartitionMissing(part) && remainingParts.contains(part)) {
                     supplyMsg.missed(part);
 
                     remainingParts.remove(part);
+
+                    evictedPartitionsLeft.decrement();
 
                     if (grp.eventRecordable(EVT_CACHE_REBALANCE_PART_MISSED))
                         grp.addRebalanceMissEvent(part);
@@ -369,20 +423,28 @@ class GridDhtPartitionSupplier {
                     continue;
                 }
 
+                // Если только в массиве, итерируемся дальше
                 if (!remainingParts.contains(part))
                     continue;
 
+                // Извлекаем энтрю
                 GridCacheEntryInfo info = extractEntryInfo(row);
 
                 if (info == null)
                     continue;
 
+                // Добавляем энтрю в сообщение
                 supplyMsg.addEntry0(part, iter.historical(part), info, grp.shared(), grp.cacheObjectContext());
 
+//                supplyMsg
+
+                // Если все данные из партиции извлечены
                 if (iter.isPartitionDone(part)) {
                     supplyMsg.last(part, loc.updateCounter());
 
                     remainingParts.remove(part);
+
+                    evictedPartitionsLeft.decrement();
 
                     if (grp.eventRecordable(EVT_CACHE_REBALANCE_PART_SUPPLIED))
                         grp.addRebalanceSupplyEvent(part);
@@ -391,9 +453,12 @@ class GridDhtPartitionSupplier {
 
             Iterator<Integer> remainingIter = remainingParts.iterator();
 
+            // Если не все партициий для отправки были добавлены
+
             while (remainingIter.hasNext()) {
                 int p = remainingIter.next();
 
+                // Если все данные партиции уже отправлены
                 if (iter.isPartitionDone(p)) {
                     GridDhtLocalPartition loc = top.localPartition(p, demandMsg.topologyVersion(), false);
 
@@ -402,15 +467,21 @@ class GridDhtPartitionSupplier {
 
                     supplyMsg.last(p, loc.updateCounter());
 
+                    // Удаляем партицию из списка
                     remainingIter.remove();
+
+                    evictedPartitionsLeft.decrement();
 
                     if (grp.eventRecordable(EVT_CACHE_REBALANCE_PART_SUPPLIED))
                         grp.addRebalanceSupplyEvent(p);
-                }
+                }// Если партиция отсутствует
                 else if (iter.isPartitionMissing(p)) {
                     supplyMsg.missed(p);
 
+                    // Удаляем партицию из списка
                     remainingIter.remove();
+
+                    evictedPartitionsLeft.decrement();
 
                     if (grp.eventRecordable(EVT_CACHE_REBALANCE_PART_MISSED))
                         grp.addRebalanceMissEvent(p);
@@ -425,6 +496,7 @@ class GridDhtPartitionSupplier {
             else
                 iter.close();
 
+            // Отправляем сообщение
             reply(topicId, demanderNode, demandMsg, supplyMsg, contextId);
 
             if (log.isInfoEnabled())

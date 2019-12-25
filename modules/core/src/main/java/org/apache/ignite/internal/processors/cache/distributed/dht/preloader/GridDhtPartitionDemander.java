@@ -58,6 +58,8 @@ import org.apache.ignite.internal.processors.cache.distributed.dht.topology.Grid
 import org.apache.ignite.internal.processors.cache.distributed.dht.topology.GridDhtPartitionTopology;
 import org.apache.ignite.internal.processors.cache.mvcc.txlog.TxState;
 import org.apache.ignite.internal.processors.cache.persistence.CacheDataRow;
+import org.apache.ignite.internal.processors.metric.MetricRegistry;
+import org.apache.ignite.internal.processors.metric.impl.AtomicLongMetric;
 import org.apache.ignite.internal.processors.timeout.GridTimeoutObject;
 import org.apache.ignite.internal.processors.timeout.GridTimeoutObjectAdapter;
 import org.apache.ignite.internal.util.future.GridCompoundFuture;
@@ -80,11 +82,13 @@ import static org.apache.ignite.events.EventType.EVT_CACHE_REBALANCE_OBJECT_LOAD
 import static org.apache.ignite.events.EventType.EVT_CACHE_REBALANCE_PART_LOADED;
 import static org.apache.ignite.events.EventType.EVT_CACHE_REBALANCE_STARTED;
 import static org.apache.ignite.events.EventType.EVT_CACHE_REBALANCE_STOPPED;
+import static org.apache.ignite.internal.processors.cache.CacheGroupMetricsImpl.CACHE_GROUP_METRICS_PREFIX;
 import static org.apache.ignite.internal.processors.cache.GridCacheUtils.TTL_ETERNAL;
 import static org.apache.ignite.internal.processors.cache.IgniteCacheOffheapManagerImpl.PRELOAD_SIZE_UNDER_CHECKPOINT_LOCK;
 import static org.apache.ignite.internal.processors.cache.distributed.dht.topology.GridDhtPartitionState.MOVING;
 import static org.apache.ignite.internal.processors.dr.GridDrType.DR_NONE;
 import static org.apache.ignite.internal.processors.dr.GridDrType.DR_PRELOAD;
+import static org.apache.ignite.internal.processors.metric.impl.MetricUtils.metricName;
 
 /**
  * Thread pool for requesting partitions from other nodes and populating local cache.
@@ -116,6 +120,12 @@ public class GridDhtPartitionDemander {
     /** Cache rebalance topic. */
     private final Object rebalanceTopic;
 
+    private final AtomicLongMetric expectedKeys;
+
+    private final AtomicLongMetric expectedBytes;
+
+    private final AtomicLongMetric evictedPartitionsLeft;
+
     /**
      * @param grp Ccahe group.
      */
@@ -141,6 +151,19 @@ public class GridDhtPartitionDemander {
         Map<Integer, Object> tops = new HashMap<>();
 
         rebalanceTopic = GridCachePartitionExchangeManager.rebalanceTopic(0);
+
+        String metricGroupName = metricName(CACHE_GROUP_METRICS_PREFIX, grp.cacheOrGroupName());
+
+        MetricRegistry mreg = grp.shared().kernalContext().metric().registry(metricGroupName);
+
+        expectedKeys = mreg.longMetric("RebalancingExpectedKeys",
+            "Description rebalancingExpectedKeys");
+
+        expectedBytes = mreg.longMetric("RebalancingExpectedBytes",
+            "Description rebalancingExpectedBytes");
+
+        evictedPartitionsLeft = mreg.longMetric("RebalancingEvictedPartitionsLeft",
+            "Description rebalancingEvictedPartitionsLeft");
     }
 
     /**
@@ -686,6 +709,9 @@ public class GridDhtPartitionDemander {
             }
 
             final GridDhtPartitionTopology top = grp.topology();
+
+            expectedKeys.add(supplyMsg.estimatedKeysCount());
+            expectedBytes.add(supplyMsg.messageSize());
 
             if (grp.sharedGroup()) {
                 for (GridCacheContext cctx : grp.caches()) {

@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.internal.GridDirectCollection;
 import org.apache.ignite.internal.GridDirectMap;
@@ -79,7 +80,7 @@ public class GridDhtPartitionSupplyMessage extends GridCacheGroupIdMessage imple
     private int msgSize;
 
     /** Estimated keys count. */
-    private long estimatedKeysCnt = -1;
+    private AtomicLong estimatedKeysCnt = new AtomicLong(0);
 
     /** Estimated keys count per cache in case the message is for shared group. */
     @GridDirectMap(keyType = int.class, valueType = long.class)
@@ -295,7 +296,7 @@ public class GridDhtPartitionSupplyMessage extends GridCacheGroupIdMessage imple
                 writer.incrementState();
 
             case 5:
-                if (!writer.writeLong("estimatedKeysCnt", estimatedKeysCnt))
+                if (!writer.writeLong("estimatedKeysCnt", estimatedKeysCnt.get()))
                     return false;
 
                 writer.incrementState();
@@ -368,7 +369,7 @@ public class GridDhtPartitionSupplyMessage extends GridCacheGroupIdMessage imple
                 reader.incrementState();
 
             case 5:
-                estimatedKeysCnt = reader.readLong("estimatedKeysCnt");
+                estimatedKeysCnt.set(reader.readLong("estimatedKeysCnt"));
 
                 if (!reader.isLastRead())
                     return false;
@@ -451,14 +452,14 @@ public class GridDhtPartitionSupplyMessage extends GridCacheGroupIdMessage imple
      * @return Estimated keys count.
      */
     public long estimatedKeysCount() {
-        return -1;
+        return estimatedKeysCnt.longValue();
     }
 
     /**
      * @param cnt Keys count to add.
      */
     public void addEstimatedKeysCount(long cnt) {
-        this.estimatedKeysCnt += cnt;
+        this.estimatedKeysCnt.addAndGet(cnt);
     }
 
     /**
