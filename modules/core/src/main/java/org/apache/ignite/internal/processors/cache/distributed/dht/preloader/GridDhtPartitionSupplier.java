@@ -55,12 +55,13 @@ import org.apache.ignite.spi.IgniteSpiException;
 
 import static org.apache.ignite.events.EventType.EVT_CACHE_REBALANCE_PART_MISSED;
 import static org.apache.ignite.events.EventType.EVT_CACHE_REBALANCE_PART_SUPPLIED;
+import static org.apache.ignite.internal.processors.cache.GridCacheUtils.extractEntryInfo;
 import static org.apache.ignite.internal.processors.cache.distributed.dht.topology.GridDhtPartitionState.OWNING;
 
 /**
  * Class for supplying partitions to demanding nodes.
  */
-class GridDhtPartitionSupplier {
+public class GridDhtPartitionSupplier {
     /** */
     private final CacheGroupContext grp;
 
@@ -372,7 +373,7 @@ class GridDhtPartitionSupplier {
                 if (!remainingParts.contains(part))
                     continue;
 
-                GridCacheEntryInfo info = extractEntryInfo(row);
+                GridCacheEntryInfo info = extractEntryInfo(row, grp.mvccEnabled());
 
                 if (info == null)
                     continue;
@@ -492,43 +493,6 @@ class GridDhtPartitionSupplier {
                     + supplyRoutineInfo(topicId, nodeId, demandMsg) + "]", t)
             ));
         }
-    }
-
-    /**
-     * Extracts entry info from row.
-     *
-     * @param row Cache data row.
-     * @return Entry info.
-     */
-    private GridCacheEntryInfo extractEntryInfo(CacheDataRow row) {
-        GridCacheEntryInfo info = grp.mvccEnabled() ?
-            new GridCacheMvccEntryInfo() : new GridCacheEntryInfo();
-
-        info.key(row.key());
-        info.cacheId(row.cacheId());
-
-        if (grp.mvccEnabled()) {
-            assert row.mvccCoordinatorVersion() != MvccUtils.MVCC_CRD_COUNTER_NA;
-
-            // Rows from rebalance iterator have actual states already.
-            if (row.mvccTxState() != TxState.COMMITTED)
-                return null;
-
-            ((MvccVersionAware)info).mvccVersion(row);
-            ((GridCacheMvccEntryInfo)info).mvccTxState(TxState.COMMITTED);
-
-            if (row.newMvccCoordinatorVersion() != MvccUtils.MVCC_CRD_COUNTER_NA &&
-                row.newMvccTxState() == TxState.COMMITTED) {
-                ((MvccUpdateVersionAware)info).newMvccVersion(row);
-                ((GridCacheMvccEntryInfo)info).newMvccTxState(TxState.COMMITTED);
-            }
-        }
-
-        info.value(row.value());
-        info.version(row.version());
-        info.expireTime(row.expireTime());
-
-        return info;
     }
 
     /**

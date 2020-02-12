@@ -18,13 +18,19 @@
 package org.apache.ignite.internal.processors.cache;
 
 import com.google.common.collect.Lists;
+import java.io.Serializable;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCache;
 import org.apache.ignite.IgniteDataStreamer;
@@ -41,10 +47,14 @@ import org.apache.ignite.events.Event;
 import org.apache.ignite.events.EventType;
 import org.apache.ignite.internal.IgniteEx;
 import org.apache.ignite.internal.IgniteInternalFuture;
+import org.apache.ignite.internal.IgniteInterruptedCheckedException;
 import org.apache.ignite.internal.TestRecordingCommunicationSpi;
+import org.apache.ignite.internal.managers.communication.GridIoMessage;
+import org.apache.ignite.internal.processors.cache.distributed.dht.preloader.GridDhtPartitionDemandMessage;
 import org.apache.ignite.internal.processors.cache.distributed.dht.preloader.GridDhtPartitionSupplyMessage;
 import org.apache.ignite.internal.processors.metric.MetricRegistry;
 import org.apache.ignite.internal.util.lang.GridAbsPredicate;
+import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.internal.util.typedef.PA;
 import org.apache.ignite.internal.util.typedef.internal.CU;
 import org.apache.ignite.internal.util.typedef.internal.U;
@@ -53,11 +63,19 @@ import org.apache.ignite.internal.visor.node.VisorNodeDataCollectorTask;
 import org.apache.ignite.internal.visor.node.VisorNodeDataCollectorTaskArg;
 import org.apache.ignite.internal.visor.node.VisorNodeDataCollectorTaskResult;
 import org.apache.ignite.lang.IgniteBiPredicate;
+import org.apache.ignite.lang.IgniteFuture;
 import org.apache.ignite.lang.IgnitePredicate;
+import org.apache.ignite.lang.IgniteRunnable;
 import org.apache.ignite.plugin.extensions.communication.Message;
+import org.apache.ignite.spi.IgniteSpiContext;
+import org.apache.ignite.spi.IgniteSpiException;
+import org.apache.ignite.spi.communication.CommunicationListener;
+import org.apache.ignite.spi.communication.CommunicationSpi;
+import org.apache.ignite.spi.communication.tcp.TcpCommunicationSpi;
 import org.apache.ignite.spi.metric.LongMetric;
 import org.apache.ignite.testframework.GridTestUtils;
 import org.apache.ignite.testframework.junits.common.GridCommonAbstractTest;
+import org.jetbrains.annotations.Nullable;
 import org.junit.Test;
 
 import static org.apache.ignite.IgniteSystemProperties.IGNITE_REBALANCE_STATISTICS_TIME_INTERVAL;
@@ -98,6 +116,12 @@ public class CacheGroupsMetricsRebalanceTest extends GridCommonAbstractTest {
     /** */
     private static final int KEYS_COUNT = 10_000;
 
+    private CountDownLatch secondDemandMsg;
+
+    private CountDownLatch continueRebalance;
+
+    private AtomicLong counter = new AtomicLong();
+
     /** {@inheritDoc} */
     @Override protected void afterTest() throws Exception {
         super.afterTest();
@@ -121,7 +145,6 @@ public class CacheGroupsMetricsRebalanceTest extends GridCommonAbstractTest {
             .setCacheMode(CacheMode.PARTITIONED)
             .setAtomicityMode(CacheAtomicityMode.TRANSACTIONAL)
             .setRebalanceMode(CacheRebalanceMode.ASYNC)
-            .setRebalanceBatchSize(100)
             .setStatisticsEnabled(true);
 
         CacheConfiguration cfg2 = new CacheConfiguration(cfg1)
@@ -132,7 +155,6 @@ public class CacheGroupsMetricsRebalanceTest extends GridCommonAbstractTest {
             .setCacheMode(CacheMode.PARTITIONED)
             .setAtomicityMode(CacheAtomicityMode.TRANSACTIONAL)
             .setRebalanceMode(CacheRebalanceMode.ASYNC)
-            .setRebalanceBatchSize(100)
             .setStatisticsEnabled(true)
             .setRebalanceDelay(REBALANCE_DELAY);
 
@@ -150,9 +172,127 @@ public class CacheGroupsMetricsRebalanceTest extends GridCommonAbstractTest {
 
         cfg.setIncludeEventTypes(EventType.EVTS_ALL);
 
-        cfg.setCommunicationSpi(new TestRecordingCommunicationSpi());
+        if (secondDemandMsg != null) {
+            cfg.setCommunicationSpi(new TcpCommunicationSpi() {
+                @Override protected void notifyListener(UUID sndId, Message msg, IgniteRunnable msgC) {
+                    if (msg instanceof GridIoMessage &&
+                        ((GridIoMessage)msg).message() instanceof GridDhtPartitionDemandMessage) {
+                        GridDhtPartitionDemandMessage msg0 = (GridDhtPartitionDemandMessage)((GridIoMessage)msg).message();
+
+                        if (msg0.groupId() == CU.cacheId(GROUP2)) {
+                            secondDemandMsg.countDown();
+
+        /*                    try {
+                                continueRebalance.await();
+                            }
+                            catch (InterruptedException e) {
+                                e.printStackTrace();
+                            }*/
+                        }
+                    }
+
+                    super.notifyListener(sndId, msg, msgC);
+                }
+            });
+        } else
+            cfg.setCommunicationSpi(new TestRecordingCommunicationSpi());
+
+        cfg.setRebalanceBatchSize(500);
 
         return cfg;
+    }
+    /**
+     * @throws Exception If failed.
+     */
+    @Test
+    public void testRebalancingExpectedBytes32() throws Exception {
+        rebalancingExpectedBytes(32);
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    @Test
+    public void testRebalancingExpectedBytes128() throws Exception {
+        rebalancingExpectedBytes(128);
+    }
+
+    /**
+     * @throws Exception If failed.
+     */
+    @Test
+    public void testRebalancingExpectedBytesRandom() throws Exception {
+        rebalancingExpectedBytes(null);
+    }
+
+    /**
+     * @param valueSize value size in bytes. If null, then the size will be random.
+     */
+    private void rebalancingExpectedBytes(Integer valueSize) throws Exception{
+        secondDemandMsg = new CountDownLatch(2);
+        continueRebalance = new CountDownLatch(1);
+
+        Ignite ignite0 = startGrid(0);
+
+        Arrays.asList(CACHE4, CACHE5).forEach(name -> {
+            try (IgniteDataStreamer<Object, Object> streamer = ignite0.dataStreamer(name)) {
+                for (int i = 0; i < KEYS_COUNT; i++) {
+                    streamer.addData(i, randomArray(valueSize == null ?
+                        ThreadLocalRandom.current().nextInt(1024) : valueSize));
+                }
+
+                streamer.flush();
+            }
+        });
+
+        IgniteEx ignite1 = startGrid(1);
+
+        MetricRegistry mreg = ignite1.context().metric()
+            .registry(metricName(CACHE_GROUP_METRICS_PREFIX, GROUP2));
+
+        LongMetric expectedBytes = mreg.findMetric("RebalancingExpectedBytes");
+        LongMetric receivedBytes =  mreg.findMetric("RebalancingReceivedBytes");
+
+        System.out.println(">>>>>>>>>>>> expectedBytes before secondDemandMsg "  + expectedBytes.value());
+
+        U.await(secondDemandMsg);
+
+        System.out.println(">>>>>>>>>>>> expectedBytes after secondDemandMsg "  + expectedBytes.value());
+
+        continueRebalance.countDown();
+
+        for (String cacheName : Arrays.asList(CACHE4, CACHE5))
+            ignite1.context().cache().internalCache(cacheName).preloader().rebalanceFuture().get();
+
+        System.out.println(">>>>>>>>>>>> recievedBytes " + receivedBytes.value());
+
+        stopGrid(1);
+    }
+
+/*    *//**
+     * @param node Node.
+     * @param valueSize value size in bytes. If null, then the size will be random.
+     * @param caches Caches name.
+     *//*
+    private void rebalancingExpectedBytes(Ignite node, Integer valueSize, String... caches) {
+        Arrays.asList(caches).forEach(name -> {
+            try (IgniteDataStreamer<Object, Object> streamer = node.dataStreamer(name)) {
+                for (int i = 0; i < KEYS_COUNT; i++) {
+                    streamer.addData(i, randomArray(valueSize == null ?
+                        ThreadLocalRandom.current().nextInt(1024) : valueSize));
+                }
+
+                streamer.flush();
+            }
+        });
+    }*/
+
+    public static byte[] randomArray(int size) {
+        byte[] arr = new byte[size];
+
+        ThreadLocalRandom.current().nextBytes(arr);
+
+        return arr;
     }
 
     /**
@@ -304,6 +444,8 @@ public class CacheGroupsMetricsRebalanceTest extends GridCommonAbstractTest {
                 * (Integer.BYTES + Long.BYTES) + " bytes, but actual: " + receivedBytes.value() + ".",
             receivedBytes.value() > allKeysCount * (Integer.BYTES + Long.BYTES));
     }
+
+
 
     /**
      * @throws Exception If failed.

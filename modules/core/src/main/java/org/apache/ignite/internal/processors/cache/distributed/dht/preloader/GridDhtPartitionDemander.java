@@ -60,7 +60,6 @@ import org.apache.ignite.internal.processors.cache.distributed.dht.topology.Grid
 import org.apache.ignite.internal.processors.cache.mvcc.txlog.TxState;
 import org.apache.ignite.internal.processors.cache.persistence.CacheDataRow;
 import org.apache.ignite.internal.processors.metric.MetricRegistry;
-import org.apache.ignite.internal.processors.metric.impl.AtomicLongMetric;
 import org.apache.ignite.internal.processors.timeout.GridTimeoutObject;
 import org.apache.ignite.internal.processors.timeout.GridTimeoutObjectAdapter;
 import org.apache.ignite.internal.util.future.GridCompoundFuture;
@@ -71,10 +70,12 @@ import org.apache.ignite.internal.util.lang.IgnitePredicateX;
 import org.apache.ignite.internal.util.tostring.GridToStringExclude;
 import org.apache.ignite.internal.util.tostring.GridToStringInclude;
 import org.apache.ignite.internal.util.typedef.CI1;
+import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.internal.util.typedef.internal.CU;
 import org.apache.ignite.internal.util.typedef.internal.LT;
 import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.internal.util.typedef.internal.U;
+import org.apache.ignite.lang.IgniteBiTuple;
 import org.apache.ignite.lang.IgniteInClosure;
 import org.apache.ignite.spi.IgniteSpiException;
 import org.jetbrains.annotations.Nullable;
@@ -124,9 +125,6 @@ public class GridDhtPartitionDemander {
     /** Rebalancing last cancelled time. */
     private final AtomicLong lastCancelledTime = new AtomicLong(-1);
 
-    /** Rebalancing expected keys. */
-    private final AtomicLongMetric expectedKeys;
-
     /**
      * @param grp Ccahe group.
      */
@@ -163,7 +161,7 @@ public class GridDhtPartitionDemander {
         mreg.register("RebalancingReceivedKeys", () -> rebalanceFut.receivedKeys.get(),
             "The number of currently rebalanced keys for the whole cache group.");
 
-        mreg.register("RebalancingReceivedBytes", () -> rebalanceFut.receivedBytes.get(),
+        mreg.register("RebalancingReceivedBytes", () -> rebalanceFut.bytesNKeysCntr.get().get1(),
             "The number of currently rebalanced bytes of this cache group.");
 
         mreg.register("RebalancingStartTime", () -> rebalanceFut.startTime, "The time the first partition " +
@@ -180,12 +178,14 @@ public class GridDhtPartitionDemander {
         mreg.register("RebalancingEvictedPartitionsLeft", () -> rebalanceFut.evictedPartitionsLeft.get(),
             "The number of partitions left to be evicted before rebalancing started.");
 
-        expectedKeys = mreg.longMetric("RebalancingExpectedKeys",
+        mreg.register("RebalancingExpectedKeys", () -> rebalanceFut.expectedKeys.get(),
             "The number of expected keys to rebalance for the whole cache group.");
 
-        mreg.register("RebalancingExpectedBytes", () -> (long)(1.0 * expectedKeys.value() *
-            rebalanceFut.receivedBytes.get() / rebalanceFut.receivedKeys.get()),
-            "The number of expected bytes to rebalance  of this cache group.");
+        mreg.register("RebalancingExpectedBytes", () -> {
+            IgniteBiTuple<Long, Long> val = rebalanceFut.bytesNKeysCntr.get();
+
+            return val.get2() == 0 ? 0 : (long)(1.0 * rebalanceFut.expectedKeys.get() * val.get1() / val.get2());
+            }, "The number of expected bytes to rebalance  of this cache group.");
     }
 
     /**
@@ -344,11 +344,9 @@ public class GridDhtPartitionDemander {
 
             rebalanceFut = fut;
 
-            expectedKeys.reset();
-
             for (GridDhtPartitionDemandMessage msg : assignments.values()) {
                 for (Integer partId : msg.partitions().fullSet())
-                    expectedKeys.add(grp.topology().globalPartSizes().get(partId));
+                    rebalanceFut.expectedKeys.addAndGet(grp.topology().globalPartSizes().get(partId));
 
                 CachePartitionPartialCountersMap histMap = msg.partitions().historicalMap();
 
@@ -356,7 +354,7 @@ public class GridDhtPartitionDemander {
                     long from = histMap.initialUpdateCounterAt(i);
                     long to = histMap.updateCounterAt(i);
 
-                    expectedKeys.add(to - from);
+                    rebalanceFut.expectedKeys.addAndGet(to - from);
                 }
             }
 
@@ -365,7 +363,7 @@ public class GridDhtPartitionDemander {
                     final CacheMetricsImpl metrics = cctx.cache().metrics0();
 
                     metrics.clearRebalanceCounters();
-                    metrics.onRebalancingKeysCountEstimateReceived(expectedKeys.value());
+                    metrics.onRebalancingKeysCountEstimateReceived(rebalanceFut.expectedKeys.get());
                     metrics.startRebalance(0);
                 }
             }
@@ -738,8 +736,6 @@ public class GridDhtPartitionDemander {
 
             final GridDhtPartitionTopology top = grp.topology();
 
-            rebalanceFut.receivedBytes.addAndGet(supplyMsg.messageSize());
-
             if (grp.sharedGroup()) {
                 for (GridCacheContext cctx : grp.caches()) {
                     if (cctx.statisticsEnabled()) {
@@ -764,12 +760,16 @@ public class GridDhtPartitionDemander {
                 }
             }
 
+            long allReceivedKeys = 0;
+
             try {
                 AffinityAssignment aff = grp.affinity().cachedAffinity(topVer);
 
                 // Preload.
                 for (Map.Entry<Integer, CacheEntryInfoCollection> e : supplyMsg.infos().entrySet()) {
                     int p = e.getKey();
+
+                    allReceivedKeys += e.getValue().infos().size();
 
                     if (aff.get(p).contains(ctx.localNode())) {
                         GridDhtLocalPartition part;
@@ -807,6 +807,7 @@ public class GridDhtPartitionDemander {
                             try {
                                 Iterator<GridCacheEntryInfo> infos = e.getValue().infos().iterator();
 
+                                e.getValue().infos().size();
                                 try {
                                     if (grp.mvccEnabled())
                                         mvccPreloadEntries(topVer, node, p, infos);
@@ -891,6 +892,11 @@ public class GridDhtPartitionDemander {
                 LT.error(log, e, "Error during rebalancing [" + demandRoutineInfo(nodeId, supplyMsg) +
                     ", err=" + e + ']');
             }
+            finally {
+                long allReceivedKeys0 = allReceivedKeys;
+
+                IgniteBiTuple<Long, Long> v = rebalanceFut.bytesNKeysCntr.updateAndGet(t -> F.t(t.get1() + supplyMsg.messageSize(), t.get2() + allReceivedKeys0));
+             }
         }
         finally {
             fut.cancelLock.readLock().unlock();
@@ -1247,11 +1253,11 @@ public class GridDhtPartitionDemander {
         /** Historical rebalance set. */
         private final Set<Integer> historical = new HashSet<>();
 
-        /** Rebalanced bytes count. */
-        private final AtomicLong receivedBytes = new AtomicLong(0);
-
         /** Rebalanced keys count. */
         private final AtomicLong receivedKeys = new AtomicLong(0);
+
+        /** Rebalancing expected keys. */
+        private final AtomicLong expectedKeys = new AtomicLong(0);
 
         /** The number of cache group partitions left to be rebalanced. */
         private final AtomicLong partitionsLeft = new AtomicLong(0);
@@ -1267,6 +1273,10 @@ public class GridDhtPartitionDemander {
 
         /** Rebalancing evicted partitions left. */
         private final AtomicLong evictedPartitionsLeft;
+
+        /** Received bytes and keys counter. */
+        private final AtomicReference<IgniteBiTuple<Long, Long>> bytesNKeysCntr =
+            new AtomicReference<>(F.t(/*bytes*/0L, /*keys*/0L));
 
         /**
          * @param grp Cache group.

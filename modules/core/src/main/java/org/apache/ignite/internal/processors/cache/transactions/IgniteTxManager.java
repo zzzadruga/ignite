@@ -52,6 +52,8 @@ import org.apache.ignite.internal.pagemem.wal.WALPointer;
 import org.apache.ignite.internal.pagemem.wal.record.MvccTxRecord;
 import org.apache.ignite.internal.pagemem.wal.record.TxRecord;
 import org.apache.ignite.internal.processors.affinity.AffinityTopologyVersion;
+import org.apache.ignite.internal.processors.cache.CacheGroupMetricsImpl;
+import org.apache.ignite.internal.processors.cache.CacheObjectContext;
 import org.apache.ignite.internal.processors.cache.CacheObjectsReleaseFuture;
 import org.apache.ignite.internal.processors.cache.GridCacheContext;
 import org.apache.ignite.internal.processors.cache.GridCacheEntryEx;
@@ -66,6 +68,7 @@ import org.apache.ignite.internal.processors.cache.GridDeferredAckMessageSender;
 import org.apache.ignite.internal.processors.cache.distributed.GridCacheMappedVersion;
 import org.apache.ignite.internal.processors.cache.distributed.GridCacheTxRecoveryFuture;
 import org.apache.ignite.internal.processors.cache.distributed.GridDistributedLockCancelledException;
+import org.apache.ignite.internal.processors.cache.distributed.dht.GridDhtCacheEntry;
 import org.apache.ignite.internal.processors.cache.distributed.dht.GridDhtTxLocal;
 import org.apache.ignite.internal.processors.cache.distributed.dht.GridDhtTxOnePhaseCommitAckRequest;
 import org.apache.ignite.internal.processors.cache.distributed.dht.GridDhtTxRemote;
@@ -1529,6 +1532,8 @@ public class IgniteTxManager extends GridCacheSharedManagerAdapter {
             // 5. Notify evictions.
             notifyEvictions(tx);
 
+            updateMetrics(tx);
+
             // 6. Remove obsolete entries from cache.
             removeObsolete(tx);
 
@@ -1605,6 +1610,8 @@ public class IgniteTxManager extends GridCacheSharedManagerAdapter {
             // 4. Notify evictions.
             notifyEvictions(tx);
 
+            updateMetrics(tx);
+
             // 5. Remove obsolete entries.
             removeObsolete(tx);
 
@@ -1656,6 +1663,8 @@ public class IgniteTxManager extends GridCacheSharedManagerAdapter {
         if (txIdMap.remove(tx.xidVersion(), tx)) {
             // 1. Notify evictions.
             notifyEvictions(tx);
+
+            updateMetrics(tx);
 
             // 2. Evict near entries.
             if (!tx.readMap().isEmpty()) {
@@ -1739,6 +1748,8 @@ public class IgniteTxManager extends GridCacheSharedManagerAdapter {
 
             // 3. Notify evictions.
             notifyEvictions(tx);
+
+            updateMetrics(tx);
 
             // 4. Remove from per-thread storage.
             clearThreadMap(tx);
@@ -1832,6 +1843,43 @@ public class IgniteTxManager extends GridCacheSharedManagerAdapter {
 
         for (IgniteTxEntry txEntry : tx.allEntries())
             txEntry.cached().context().evicts().touch(txEntry, tx.local());
+    }
+
+    /**
+     * @param tx Transaction to notify evictions for.
+     */
+    private void updateMetrics(IgniteInternalTx tx) {
+        if (tx.internal())
+            return;
+
+        for (IgniteTxEntry txEntry : tx.allEntries()) {
+            GridCacheEntryEx entryEx = txEntry.cached();
+
+            if (/*tx.local() && txEntry.context().isNear() || */entryEx.isInternal())
+                continue;
+
+            try {
+
+                boolean rmv = entryEx.deleted();
+
+                CacheObjectContext ctx = context().cacheObjectContext(entryEx.context().cacheId());
+                CacheGroupMetricsImpl metrics = entryEx.context().group().metrics();
+
+                long totalSize = entryEx.memorySize();
+                //long realSize = entryEx.key().valueBytesLength(ctx) + entryEx.valueBytes().valueBytesLength(ctx);
+
+                if (rmv) {
+                    metrics.setTotalSize(-totalSize);
+                    //metrics.setRealSize(-realSize);
+                }
+
+                System.out.println();
+
+            }
+            catch (IgniteCheckedException/* | GridCacheEntryRemovedException */e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     /**

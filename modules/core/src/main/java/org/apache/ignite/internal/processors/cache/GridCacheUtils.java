@@ -72,7 +72,12 @@ import org.apache.ignite.internal.processors.cache.distributed.dht.GridDhtCacheA
 import org.apache.ignite.internal.processors.cache.distributed.dht.topology.GridDhtInvalidPartitionException;
 import org.apache.ignite.internal.processors.cache.distributed.near.GridNearCacheAdapter;
 import org.apache.ignite.internal.processors.cache.distributed.near.GridNearTxLocal;
+import org.apache.ignite.internal.processors.cache.mvcc.MvccUpdateVersionAware;
+import org.apache.ignite.internal.processors.cache.mvcc.MvccUtils;
+import org.apache.ignite.internal.processors.cache.mvcc.MvccVersionAware;
 import org.apache.ignite.internal.processors.cache.mvcc.txlog.TxLog;
+import org.apache.ignite.internal.processors.cache.mvcc.txlog.TxState;
+import org.apache.ignite.internal.processors.cache.persistence.CacheDataRow;
 import org.apache.ignite.internal.processors.cache.persistence.metastorage.MetaStorage;
 import org.apache.ignite.internal.processors.cache.transactions.IgniteInternalTx;
 import org.apache.ignite.internal.processors.cache.transactions.IgniteTxEntry;
@@ -2125,5 +2130,42 @@ public class GridCacheUtils {
      */
     public interface BackupPostProcessingClosure extends IgniteInClosure<Collection<GridCacheEntryInfo>>,
         IgniteBiInClosure<CacheObject, GridCacheVersion>{
+    }
+
+    /**
+     * Extracts entry info from row.
+     *
+     * @param row Cache data row.
+     * @return Entry info.
+     */
+    public static GridCacheEntryInfo extractEntryInfo(CacheDataRow row, boolean mvccEnabled) {
+        GridCacheEntryInfo info = mvccEnabled ?
+            new GridCacheMvccEntryInfo() : new GridCacheEntryInfo();
+
+        info.key(row.key());
+        info.cacheId(row.cacheId());
+
+        if (mvccEnabled) {
+            assert row.mvccCoordinatorVersion() != MvccUtils.MVCC_CRD_COUNTER_NA;
+
+            // Rows from rebalance iterator have actual states already.
+            if (row.mvccTxState() != TxState.COMMITTED)
+                return null;
+
+            ((MvccVersionAware)info).mvccVersion(row);
+            ((GridCacheMvccEntryInfo)info).mvccTxState(TxState.COMMITTED);
+
+            if (row.newMvccCoordinatorVersion() != MvccUtils.MVCC_CRD_COUNTER_NA &&
+                row.newMvccTxState() == TxState.COMMITTED) {
+                ((MvccUpdateVersionAware)info).newMvccVersion(row);
+                ((GridCacheMvccEntryInfo)info).newMvccTxState(TxState.COMMITTED);
+            }
+        }
+
+        info.value(row.value());
+        info.version(row.version());
+        info.expireTime(row.expireTime());
+
+        return info;
     }
 }

@@ -71,7 +71,6 @@ public class GridCachePartitionedMultiThreadedPutGetSelfTest extends GridCommonA
         FifoEvictionPolicy plc = new FifoEvictionPolicy();
         plc.setMaxMemorySize(1000);
 
-        cc.setEvictionPolicy(plc);
         cc.setOnheapCacheEnabled(true);
         cc.setAtomicityMode(TRANSACTIONAL);
 

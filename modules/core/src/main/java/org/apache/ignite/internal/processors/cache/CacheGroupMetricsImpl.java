@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.cache.CacheMode;
 import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.configuration.CacheConfiguration;
@@ -34,8 +35,10 @@ import org.apache.ignite.internal.processors.affinity.AffinityAssignment;
 import org.apache.ignite.internal.processors.affinity.AffinityTopologyVersion;
 import org.apache.ignite.internal.processors.cache.distributed.dht.preloader.GridDhtPartitionFullMap;
 import org.apache.ignite.internal.processors.cache.distributed.dht.preloader.GridDhtPartitionMap;
+import org.apache.ignite.internal.processors.cache.distributed.dht.preloader.IgniteDhtDemandedPartitionsMap;
 import org.apache.ignite.internal.processors.cache.distributed.dht.topology.GridDhtLocalPartition;
 import org.apache.ignite.internal.processors.cache.distributed.dht.topology.GridDhtPartitionState;
+import org.apache.ignite.internal.processors.cache.persistence.CacheDataRow;
 import org.apache.ignite.internal.processors.cache.persistence.DataRegion;
 import org.apache.ignite.internal.processors.cache.persistence.DataRegionMetricsImpl;
 import org.apache.ignite.internal.processors.cache.persistence.GridCacheDatabaseSharedManager;
@@ -43,8 +46,11 @@ import org.apache.ignite.internal.processors.metric.MetricRegistry;
 import org.apache.ignite.internal.processors.metric.impl.AtomicLongMetric;
 import org.apache.ignite.internal.processors.metric.impl.LongAdderMetric;
 import org.apache.ignite.internal.util.typedef.internal.CU;
+import org.apache.ignite.internal.util.typedef.internal.U;
 import org.apache.ignite.spi.metric.LongMetric;
+import sun.rmi.runtime.Log;
 
+import static org.apache.ignite.internal.processors.cache.GridCacheUtils.extractEntryInfo;
 import static org.apache.ignite.internal.processors.metric.impl.MetricUtils.metricName;
 
 /**
@@ -68,6 +74,10 @@ public class CacheGroupMetricsImpl {
 
     /** */
     private final LongMetric sparseStorageSize;
+
+    private final AtomicLongMetric totalSize;
+
+    private final AtomicLongMetric realSize;
 
     /** Interface describing a predicate of two integers. */
     private interface IntBiPredicate {
@@ -104,6 +114,12 @@ public class CacheGroupMetricsImpl {
 
         idxBuildCntPartitionsLeft = mreg.longMetric("IndexBuildCountPartitionsLeft",
             "Number of partitions need processed for finished indexes create or rebuilding.");
+
+        totalSize = mreg.longMetric("TotalSize",
+            "Total size.");
+
+        realSize = mreg.longMetric("RealSize",
+            "Real size.");
 
         DataRegion region = ctx.dataRegion();
 
@@ -169,6 +185,19 @@ public class CacheGroupMetricsImpl {
         mreg.register("TotalAllocatedSize",
             this::getTotalAllocatedSize,
             "Total size of memory allocated for group, in bytes.");
+
+        mreg.register("Total Size",
+            this::getTotalSize,
+            "The total amountы of memory occupied by the group in bytes.");
+
+        mreg.register("Total entries",
+            this::getTotalEntries,
+            "The total amount of memory occupied by the group in bytes.");
+
+        mreg.register("RebalanceSize", () -> realSize.value() +
+            getTotalEntries() * GridCacheEntryInfo.SIZE_OVERHEAD, "Rebalance size");
+
+
     }
 
     /** */
@@ -249,6 +278,53 @@ public class CacheGroupMetricsImpl {
         }
 
         return res;
+    }
+
+    /**
+     * @return total entries size in bytes.
+     */
+    private long getTotalSize() {
+        IgniteDhtDemandedPartitionsMap map = new IgniteDhtDemandedPartitionsMap();
+
+        for (int i = 0; i < getPartitions(); i++)
+            map.addFull(i);
+
+        long sizes = 0;
+
+        try {
+            IgniteRebalanceIterator iter = ctx.offheap().rebalanceIterator(map, ctx.affinity().lastVersion());
+
+            for (CacheDataRow row : iter) {
+                GridCacheEntryInfo info = extractEntryInfo(row, ctx.mvccEnabled());
+
+                sizes += info.marshalledSize(ctx.cacheObjectContext());
+            }
+        } catch (IgniteCheckedException e) {
+            e.printStackTrace();
+        }
+
+        return sizes;
+    }
+
+    /**
+     * @param size total size.
+     */
+    public void setTotalSize(long size) {
+        totalSize.add(size);
+    }
+
+    /**
+     * @param size total size.
+     */
+    public void setRealSize(long size) {
+        realSize.add(size);
+    }
+
+    /**
+     * @return total entries in cacheGroup.
+     */
+    private long getTotalEntries() {
+        return ctx.caches().stream().mapToLong(ctx -> ctx.cache().size()).sum();
     }
 
     /** */
