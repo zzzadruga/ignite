@@ -733,8 +733,13 @@ public class GridDhtLocalPartition extends GridCacheConcurrentMapImpl implements
                         }
 
                         rebFut.evictedPartitionsLeft(1);
+                        System.out.println("+1");
 
-                        onClearFinished(f -> rebFut.evictedPartitionsLeft(-1));
+                        onClearFinished(f -> {
+                            System.out.println("-1");
+                            rebFut.evictedPartitionsLeft(-1);
+                        });
+
 
                         ctx.evict().evictPartitionAsync(grp, this, CLEARING);
                     }
@@ -744,8 +749,11 @@ public class GridDhtLocalPartition extends GridCacheConcurrentMapImpl implements
             }
 
             rebFut.evictedPartitionsLeft(1);
+            System.out.println("+1");
+            onClearFinished(f -> {
+                System.out.println("-1");
+                rebFut.evictedPartitionsLeft(-1);});
 
-            onClearFinished(f -> rebFut.evictedPartitionsLeft(-1));
         }
 
         // Try fast eviction.

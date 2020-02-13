@@ -18,18 +18,22 @@
 package org.apache.ignite.internal.processors.cache.distributed.dht.topology;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteDataStreamer;
 import org.apache.ignite.cache.CacheAtomicityMode;
 import org.apache.ignite.cache.CacheMode;
 import org.apache.ignite.cache.affinity.rendezvous.RendezvousAffinityFunction;
+import org.apache.ignite.cluster.ClusterState;
 import org.apache.ignite.configuration.CacheConfiguration;
 import org.apache.ignite.configuration.DataRegionConfiguration;
 import org.apache.ignite.configuration.DataStorageConfiguration;
@@ -37,6 +41,8 @@ import org.apache.ignite.configuration.IgniteConfiguration;
 import org.apache.ignite.configuration.WALMode;
 import org.apache.ignite.internal.IgniteEx;
 import org.apache.ignite.internal.managers.communication.GridIoMessage;
+import org.apache.ignite.internal.processors.cache.CacheGroupContext;
+import org.apache.ignite.internal.processors.cache.distributed.dht.preloader.GridDhtPartitionDemander;
 import org.apache.ignite.internal.processors.cache.distributed.dht.preloader.GridDhtPartitionSupplyMessage;
 import org.apache.ignite.internal.util.typedef.internal.CU;
 import org.apache.ignite.internal.util.typedef.internal.U;
@@ -74,6 +80,8 @@ public class CacheGroupsMetricsPartitionsEvictionBeforeRebalanceTest extends Gri
 
     /** Node received supply message. */
     private CountDownLatch supplyMsg = new CountDownLatch(1);
+
+    private LongMetric metric;
 
     /** Test log. */
     private final ListeningTestLogger log = new ListeningTestLogger(false, GridAbstractTest.log);
@@ -124,9 +132,10 @@ public class CacheGroupsMetricsPartitionsEvictionBeforeRebalanceTest extends Gri
     public void partitionsEvictionBeforeRebalanceTest() throws Exception {
         IgniteEx ig0 = startGrids(2);
 
-        ig0.cluster().active(true);
+        ig0.cluster().state(ClusterState.ACTIVE);
 
         stopGrid(1);
+
 
         loadData(ig0);
 
@@ -134,19 +143,44 @@ public class CacheGroupsMetricsPartitionsEvictionBeforeRebalanceTest extends Gri
 
         U.await(supplyMsg);
 
-        ig0.cluster().active(false);
+        ig0.cluster().state(ClusterState.INACTIVE);
 
         blockEviction(ig1);
 
-        ig0.cluster().active(true);
+        ig0.cluster().state(ClusterState.ACTIVE);
 
         LongMetric evictedPartitionsLeft = ig1.context().metric().registry(metricName(CACHE_GROUP_METRICS_PREFIX, GROUP))
             .findMetric("RebalancingEvictedPartitionsLeft");
 
-        U.await(lastPart);
+        metric = evictedPartitionsLeft;
 
-        assertEquals("The number of partitions left to be evicted before rebalancing started must be equal to total " +
-            "number of partitions in affinity function.", PARTITION_COUNT, evictedPartitionsLeft.value());
+        U.await(lastPart);
+        GridDhtPartitionDemander.RebalanceFuture fut = (GridDhtPartitionDemander.RebalanceFuture)ig1.context()
+            .cache().internalCache(CACHE_NAMES.get(CACHE_NAMES.size() - 1)).preloader().rebalanceFuture();
+
+        AtomicLong evictedPartitionsLeftFut = U.field(fut, "evictedPartitionsLeft");
+
+        try {
+            System.out.println(">>>>>>>>>>>>>>>> future: " + evictedPartitionsLeftFut.get() + " " + evictedPartitionsLeftFut
+            + " grp: " + U.<CacheGroupContext>field(fut, "grp") == null ? "null" : U.<CacheGroupContext>field(fut, "grp").cacheOrGroupName());
+            assertEquals("The number of partitions left to be evicted before rebalancing started must be equal to total " +
+                "number of partitions in affinity function.", PARTITION_COUNT, evictedPartitionsLeft.value());
+        } catch (AssertionError e) {
+            System.out.println(">>>>>>>>>>>>>>>> future: " + evictedPartitionsLeftFut.get() + " " + evictedPartitionsLeftFut
+                + " grp: " + U.<CacheGroupContext>field(fut, "grp") == null ? "null" : U.<CacheGroupContext>field(fut, "grp").cacheOrGroupName());
+
+            startEvict.countDown();
+
+            throw e;
+        } finally {
+            startEvict.countDown();
+        }
+
+/*        long evictParts = U.<Map<Integer, Map<Integer, PartitionsEvictManager.EvictReason>>>field(ig0.context().cache()
+                .context().evict(), "logEvictPartByGrps").get(CU.cacheId(GROUP)).entrySet().stream()
+            .filter(e -> e.getValue() == PartitionsEvictManager.EvictReason.CLEARING).count();
+
+        assertEquals(evictParts, evictedPartitionsLeft.value());*/
 
         LogListener evictionCompleted = LogListener.matches(s -> s.contains("Starting rebalance routine [" + GROUP)).build();
 
@@ -208,6 +242,8 @@ public class CacheGroupsMetricsPartitionsEvictionBeforeRebalanceTest extends Gri
         /** {@inheritDoc} */
         @Override public boolean offer(PartitionsEvictManager.PartitionEvictionTask task) {
             GridDhtLocalPartition part = U.field(task, "part");
+            if (part.group().name().equals(GROUP))
+                System.out.println(">>>>>>> id: " + part.id() + " metric: " + metric.value());
 
             if (part.group().name().equals(GROUP) && part.id() == PARTITION_COUNT - 1) {
                 lastPart.countDown();

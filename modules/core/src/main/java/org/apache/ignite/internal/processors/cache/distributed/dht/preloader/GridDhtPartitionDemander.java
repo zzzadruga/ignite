@@ -173,7 +173,10 @@ public class GridDhtPartitionDemander {
             "rebalancing was completed with an error or was cancelled. If there were several such cases, the metric " +
             "stores the last time. The metric displays the value even if there is no rebalancing process.");
 
-        mreg.register("RebalancingEvictedPartitionsLeft", () -> rebalanceFut.evictedPartitionsLeft.get(),
+        mreg.register("RebalancingEvictedPartitionsLeft", () -> {
+                System.out.println("is Initial? " + rebalanceFut.isInitial() + " " + rebalanceFut.evictedPartitionsLeft.get());
+            return rebalanceFut.evictedPartitionsLeft.get();
+            },
             "The number of partitions left to be evicted before rebalancing started.");
 
         mreg.register("RebalancingExpectedKeys", () -> rebalanceFut.expectedKeys.get(),
@@ -1283,6 +1286,7 @@ public class GridDhtPartitionDemander {
 
             this.lastCancelledTime = lastCancelledTime;
             this.evictedPartitionsLeft = evictedPartitionsLeft;
+            System.out.println("hash cnstrctr " + evictedPartitionsLeft.hashCode() + " grp " + grp.name());
 
             assignments.forEach((k, v) -> {
                 assert v.partitions() != null :
@@ -1327,6 +1331,7 @@ public class GridDhtPartitionDemander {
             this.cancelLock = new ReentrantReadWriteLock();
             this.lastCancelledTime = new AtomicLong();
             this.evictedPartitionsLeft = new AtomicLong(0);
+            System.out.println("hash dflt " + evictedPartitionsLeft.hashCode() + " grp null ");
         }
 
         /**
