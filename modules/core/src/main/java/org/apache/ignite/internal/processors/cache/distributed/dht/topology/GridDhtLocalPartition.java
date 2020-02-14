@@ -733,10 +733,12 @@ public class GridDhtLocalPartition extends GridCacheConcurrentMapImpl implements
                         }
 
                         rebFut.evictedPartitionsLeft(1);
-                        System.out.println("+1");
+                        if (group().name().equals("group"))
+                        System.out.println("+1 " + id);
 
                         onClearFinished(f -> {
-                            System.out.println("-1");
+                            if (group().name().equals("group"))
+                            System.out.println("-1 " + id);
                             rebFut.evictedPartitionsLeft(-1);
                         });
 
@@ -749,9 +751,11 @@ public class GridDhtLocalPartition extends GridCacheConcurrentMapImpl implements
             }
 
             rebFut.evictedPartitionsLeft(1);
-            System.out.println("+1");
+            if (group().name().equals("group"))
+                System.out.println("+1 " + id);
             onClearFinished(f -> {
-                System.out.println("-1");
+                if (group().name().equals("group"))
+                    System.out.println("-1 " + id);
                 rebFut.evictedPartitionsLeft(-1);});
 
         }

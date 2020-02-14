@@ -181,6 +181,10 @@ public class GridDhtPartitionDemander {
 
         mreg.register("RebalancingExpectedKeys", () -> rebalanceFut.expectedKeys.get(),
             "The number of expected keys to rebalance for the whole cache group.");
+
+        if (grp.cacheOrGroupName().equals("group")) {
+            System.out.println("Initialize demander");
+        }
     }
 
     /**
