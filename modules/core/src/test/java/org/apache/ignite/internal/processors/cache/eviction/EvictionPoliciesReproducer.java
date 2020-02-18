@@ -37,7 +37,7 @@ import static org.apache.ignite.events.EventType.EVT_CACHE_ENTRY_EVICTED;
 /**
  *
  */
-public class EvictionPoliciesTest extends GridCommonAbstractTest {
+public class EvictionPoliciesReproducer extends GridCommonAbstractTest {
 
     /** Keys count. */
     private static final int KEYS_COUNT = 30;
@@ -58,6 +58,12 @@ public class EvictionPoliciesTest extends GridCommonAbstractTest {
         cfg.setIncludeEventTypes(EVT_CACHE_ENTRY_EVICTED);
 
         return cfg;
+    }
+
+    @Override protected void afterTest() throws Exception {
+        super.afterTest();
+
+        stopAllGrids();
     }
 
     /**
@@ -106,7 +112,8 @@ public class EvictionPoliciesTest extends GridCommonAbstractTest {
         ignite0.cache(DEFAULT_CACHE_NAME).remove(777);
 
         // Cache is empty, but all entries will be evicted.
-        addEntries(ignite0, KEYS_COUNT);
+        addEntries(ignite0, 0);
+        //addEntries(ignite0, KEYS_COUNT);
     }
 
     /**
@@ -128,7 +135,7 @@ public class EvictionPoliciesTest extends GridCommonAbstractTest {
 
         assertEquals(0, cache.size());
 
-        for (int i = 1; i <= KEYS_COUNT; ++i)
+        for (int i = 0; i < KEYS_COUNT; ++i)
             cache.put(i, new byte[29]);
 
         assertEquals(expectedEvictedEntries, evictedEntries.get());
