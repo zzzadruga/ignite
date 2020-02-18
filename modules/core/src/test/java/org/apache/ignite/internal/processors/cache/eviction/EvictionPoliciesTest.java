@@ -64,24 +64,29 @@ public class EvictionPoliciesTest extends GridCommonAbstractTest {
      * {@link FifoEvictionPolicyFactory} test.
      */
     @Test
-    public void testFifoEvictionPolicy() {
+    public void testFifoEvictionPolicy() throws Exception {
         evictionFactory = new FifoEvictionPolicyFactory();
+        testEvictionPolicy();
     }
 
     /**
      * {@link LruEvictionPolicyFactory} test.
      */
     @Test
-    public void testLruEvictionPolicy() {
+    public void testLruEvictionPolicy() throws Exception {
+
         evictionFactory = new LruEvictionPolicyFactory();
+        testEvictionPolicy();
     }
 
     /**
      * {@link SortedEvictionPolicyFactory} test.
      */
     @Test
-    public void testSortedEvictionPolicy() {
+    public void testSortedEvictionPolicy() throws Exception {
+
         evictionFactory = new SortedEvictionPolicyFactory();
+        testEvictionPolicy();
     }
 
     /**
@@ -123,7 +128,7 @@ public class EvictionPoliciesTest extends GridCommonAbstractTest {
 
         assertEquals(0, cache.size());
 
-        for (int i = 1; i < KEYS_COUNT; ++i)
+        for (int i = 1; i <= KEYS_COUNT; ++i)
             cache.put(i, new byte[29]);
 
         assertEquals(expectedEvictedEntries, evictedEntries.get());
