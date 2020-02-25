@@ -136,39 +136,45 @@ public class ClusterNodeAttributeColocatedBackupFilterTest extends GridCommonAbs
      *
      */
     private void checkPartitions() throws Exception {
-        IgniteEx client = startClientGrid();
+        try (IgniteEx client = startClientGrid()) {
+            Map<Object, T2<List<Integer>, Collection<Object>>> attributes = new TreeMap<>();
 
-        Map<Object, T2<List<Integer>, Collection<UUID>>> attributes = new TreeMap<>();
+            try {
+                for (int i = 0; i < PART_CNT; i++) {
+                    Collection<ClusterNode> nodes = client.affinity(CACHE_NAME).mapKeyToPrimaryAndBackups(i);
 
-        for (int i = 0; i < PART_CNT; i++) {
-            Collection<ClusterNode> nodes = client.affinity(CACHE_NAME).mapKeyToPrimaryAndBackups(i);
+                    Map<Object, Long> stat = nodes.stream().collect(Collectors.groupingBy(
+                        n -> n.attributes().get(COLOCATION_ATTR), Collectors.counting()));
 
-            Map<Object, Long> stat = nodes.stream().collect(Collectors.groupingBy(
-                n -> n.attributes().get(COLOCATION_ATTR), Collectors.counting()));
+                    assertEquals("Partitions should be located on nodes from only one cell [partition: + " + i +
+                        ", attributes: " + stat.keySet() + "]", 1, stat.keySet().size());
 
-            assertEquals("Partitions should be located on nodes from only one cell [partition: + " + i +
-                ", attributes: " + stat.keySet() + "]", 1, stat.keySet().size());
+                    assertEquals("Partitions should be located on all nodes of the cell [node per cell: " +
+                        NODES_PER_CELL + ", nodes: " + nodes.stream().map(ClusterNode::consistentId).collect(Collectors.toSet())
+                        + "]", -NODES_PER_CELL, stat.values().iterator().next().longValue());
 
-            assertEquals("Partitions should be located on all nodes of the cell [node per cell: " +
-                NODES_PER_CELL + ", nodes: " + nodes.stream().map(ClusterNode::consistentId).collect(Collectors.toSet())
-                + "]", NODES_PER_CELL, stat.values().iterator().next().longValue());
+                    Object attribute = stat.keySet().iterator().next();
 
-            Object attribute = stat.keySet().iterator().next();
+                    List<Object> consistentIds = nodes.stream().map(ClusterNode::consistentId).collect(Collectors.toList());
 
-            List<UUID> uuids =  nodes.stream().map(ClusterNode::id).collect(Collectors.toList());
+                    attributes.putIfAbsent(attribute, new T2<>(new ArrayList<>(), consistentIds));
+                    attributes.get(attribute).get1().add(i);
 
-            attributes.putIfAbsent(attribute, new T2<>(new ArrayList<>(), uuids));
-            attributes.get(attribute).get1().add(i);
+                    assertTrue(consistentIds.containsAll(attributes.get(attribute).get2()));
+                }
 
-            assertTrue(uuids.containsAll(attributes.get(attribute).get2()));
-        }
+                for (Map.Entry<Object, T2<List<Integer>, Collection<Object>>> entry : attributes.entrySet()) {
+                    System.out.println(entry.getKey() + " nodes: " + entry.getValue()
+                        .get2()
+                        .stream()
+                        .map(Object::toString)
+                        .collect(Collectors.toCollection(TreeSet::new)) + " parts: " + entry.getValue().get1());
+                }
 
-        for (Map.Entry<Object, T2<List<Integer>, Collection<UUID>>> entry : attributes.entrySet()) {
-            System.out.println(entry.getKey() + " nodes: " + entry.getValue()
-                .get2()
-                .stream()
-                .map(id -> id.toString().substring(id.toString().length() - 2))
-                .collect(Collectors.toCollection(TreeSet::new)) + " parts: " + entry.getValue().get1());
+            } finally {
+                // be sure to call when running at the stand
+                client.destroyCache(CACHE_NAME);
+            }
         }
     }
 
@@ -180,5 +186,4 @@ public class ClusterNodeAttributeColocatedBackupFilterTest extends GridCommonAbs
         return startGrid(getTestIgniteInstanceName(idx), optimize(getConfiguration(getTestIgniteInstanceName(idx)).setUserAttributes(
             U.map(COLOCATION_ATTR, colocationAttrVal))), null);
     }
-
 }
