@@ -43,13 +43,13 @@ public class ClusterNodeAttributeColocatedBackupFilterTest extends GridCommonAbs
     private static final String COLOCATION_ATTR = "attr";
 
     /** Partition count. */
-    private static final int PART_CNT = 128;
+    private static final int PART_CNT = 10240;
 
     /** Backups count. */
     private static final int BACKUPS = 2;
 
     /** Number of cells. */
-    private static final int CELLS_COUNT = 10;
+    private static final int CELLS_COUNT = 20;
 
     /** Number of nodes per cell. */
     private static final int NODES_PER_CELL = 1 + BACKUPS;
@@ -78,6 +78,10 @@ public class ClusterNodeAttributeColocatedBackupFilterTest extends GridCommonAbs
         stopAllGrids();
     }
 
+    @Override protected long getTestTimeout() {
+        return 30 * 60 * 60 * 1024;
+    }
+
     /**
      * Test affinity backup filter.
      */
@@ -85,7 +89,7 @@ public class ClusterNodeAttributeColocatedBackupFilterTest extends GridCommonAbs
     public void testAffinityBackupFilter() throws Exception {
         for (int i = 0; i < CELLS_COUNT; i++) {
             for (int j = 0; j < NODES_PER_CELL; j++) {
-                startGrid(i * NODES_PER_CELL + j, PREFIX + i);
+                startGrid(i * NODES_PER_CELL + j + 1, PREFIX + ((i + 1) < 10 ? ("0" + (i + 1)) : (i + 1)));
             }
         }
 
@@ -151,7 +155,7 @@ public class ClusterNodeAttributeColocatedBackupFilterTest extends GridCommonAbs
 
                     assertEquals("Partitions should be located on all nodes of the cell [node per cell: " +
                         NODES_PER_CELL + ", nodes: " + nodes.stream().map(ClusterNode::consistentId).collect(Collectors.toSet())
-                        + "]", -NODES_PER_CELL, stat.values().iterator().next().longValue());
+                        + "]", NODES_PER_CELL, stat.values().iterator().next().longValue());
 
                     Object attribute = stat.keySet().iterator().next();
 
@@ -164,11 +168,11 @@ public class ClusterNodeAttributeColocatedBackupFilterTest extends GridCommonAbs
                 }
 
                 for (Map.Entry<Object, T2<List<Integer>, Collection<Object>>> entry : attributes.entrySet()) {
-                    System.out.println(entry.getKey() + " nodes: " + entry.getValue()
+                    System.out.println(entry.getKey() + /*" nodes: " + entry.getValue()
                         .get2()
                         .stream()
                         .map(Object::toString)
-                        .collect(Collectors.toCollection(TreeSet::new)) + " parts: " + entry.getValue().get1());
+                        .collect(Collectors.toCollection(TreeSet::new)) + */" parts: " + entry.getValue().get1().size());
                 }
 
             } finally {
