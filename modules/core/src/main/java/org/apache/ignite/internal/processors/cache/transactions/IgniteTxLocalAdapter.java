@@ -1795,10 +1795,28 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
             if (deadlockErr != null || !locked) {
                 setRollbackOnly();
 
+                StringBuilder candidates = new StringBuilder();
+
+                if (lockOwner != null) {
+                    for (int i = 0; i < lockOwner.size(); i++) {
+                        T2<IgniteInternalTx, UUID> candidate = lockOwner.get(i);
+
+                        candidates.append(", ").append(i == 0 ? "lock owner=" : i == 1 ? "queue=[" : "")
+                            .append("[xid=").append(candidate.getKey().xid())
+                            .append(", xidVer=").append(candidate.getKey().xidVersion())
+                            .append(", nearXid=").append(candidate.getKey().nearXidVersion().asGridUuid())
+                            .append(", nearXidVer=").append(candidate.getKey().nearXidVersion())
+                            .append(", label=").append(candidate.getKey().label())
+                            .append(", nearNodeId=").append(candidate.getValue())
+                            .append(i > 0 && i == lockOwner.size() - 1? "]]" : "]");
+                    }
+
+                }
+
                 final GridClosureException ex = new GridClosureException(
                     new IgniteTxTimeoutCheckedException("Failed to acquire lock within provided timeout " +
                         "for transaction [timeout=" + timeout() + ", tx=" + CU.txString(IgniteTxLocalAdapter.this) +
-                        ']', deadlockErr)
+                        ']' + candidates, deadlockErr)
                 );
 
                 if (commit && commitAfterLock())

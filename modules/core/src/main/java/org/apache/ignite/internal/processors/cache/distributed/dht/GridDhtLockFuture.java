@@ -70,6 +70,7 @@ import org.apache.ignite.internal.util.tostring.GridToStringInclude;
 import org.apache.ignite.internal.util.typedef.C1;
 import org.apache.ignite.internal.util.typedef.CI2;
 import org.apache.ignite.internal.util.typedef.F;
+import org.apache.ignite.internal.util.typedef.T2;
 import org.apache.ignite.internal.util.typedef.internal.CU;
 import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.internal.util.typedef.internal.U;
@@ -1167,13 +1168,19 @@ public final class GridDhtLockFuture extends GridCacheCompoundIdentityFuture<Boo
             long longOpsDumpTimeout = cctx.tm().longOperationsDumpTimeout();
 
             synchronized (GridDhtLockFuture.this) {
-                if (log.isDebugEnabled() || timeout >= longOpsDumpTimeout) {
-                    String msg = dumpPendingLocks();
+                T2<KeyCacheObject, List<T2<IgniteInternalTx, UUID>>> candidates = candidatesAwaitingPendingLocks();
 
-                    if (log.isDebugEnabled())
-                        log.debug(msg);
-                    else
-                        log.warning(msg);
+                if (candidates != null) {
+                    tx.lockOwner(candidates.getValue());
+
+                    if (log.isDebugEnabled() || timeout >= longOpsDumpTimeout) {
+                        String msg = dumpPendingLocks(candidates.getKey(), candidates.getValue());
+
+                        if (log.isDebugEnabled())
+                            log.debug(msg);
+                        else
+                            log.warning(msg);
+                    }
                 }
 
                 timedOut = true;
@@ -1197,26 +1204,20 @@ public final class GridDhtLockFuture extends GridCacheCompoundIdentityFuture<Boo
         /**
          * NB! Should be called in synchronized block on {@link GridDhtLockFuture} instance.
          *
-         * @return String representation of pending locks.
+         * @return a pair - key and list of candidates pending lock this key. The first element in the list is the
+         * owner of the key.
          */
-        private String dumpPendingLocks() {
-            StringBuilder sb = new StringBuilder();
-
-            sb.append("Transaction tx=").append(tx.getClass().getSimpleName());
-            sb.append(" [xid=").append(tx.xid());
-            sb.append(", xidVer=").append(tx.xidVersion());
-            sb.append(", nearXid=").append(tx.nearXidVersion().asGridUuid());
-            sb.append(", nearXidVer=").append(tx.nearXidVersion());
-            sb.append(", nearNodeId=").append(tx.nearNodeId());
-            sb.append(", label=").append(tx.label());
-            sb.append("] timed out, can't acquire lock for ");
-
+        private T2<KeyCacheObject, List<T2<IgniteInternalTx, UUID>>> candidatesAwaitingPendingLocks() {
             Iterator<KeyCacheObject> locks = pendingLocks.iterator();
+
+            List<T2<IgniteInternalTx, UUID>> txCandidates = new ArrayList<>();
 
             boolean found = false;
 
+            KeyCacheObject key = null;
+
             while (!found && locks.hasNext()) {
-                KeyCacheObject key = locks.next();
+                key = locks.next();
 
                 GridCacheEntryEx entry = cctx.cache().entryEx(key, topVer);
 
@@ -1224,23 +1225,17 @@ public final class GridDhtLockFuture extends GridCacheCompoundIdentityFuture<Boo
                     try {
                         Collection<GridCacheMvccCandidate> candidates = entry.localCandidates();
 
+                        txCandidates.clear();
+
                         for (GridCacheMvccCandidate candidate : candidates) {
                             IgniteInternalTx itx = cctx.tm().tx(candidate.version());
 
                             if (itx != null && candidate.owner() && !candidate.version().equals(tx.xidVersion())) {
-                                sb.append("key=").append(key).append(", owner=");
-                                sb.append("[xid=").append(itx.xid()).append(", ");
-                                sb.append("xidVer=").append(itx.xidVersion()).append(", ");
-                                sb.append("nearXid=").append(itx.nearXidVersion().asGridUuid()).append(", ");
-                                sb.append("nearXidVer=").append(itx.nearXidVersion()).append(", ");
-                                sb.append("label=").append(itx.label()).append(", ");
-                                sb.append("nearNodeId=").append(candidate.otherNodeId()).append("]");
-                                sb.append(", queueSize=").append(candidates.isEmpty() ? 0 : candidates.size() - 1);
-
                                 found = true;
 
-                                break;
-                            }
+                                txCandidates.add(0, new T2<>(itx, candidate.otherNodeId()));
+                            } else
+                                txCandidates.add(new T2<>(itx, candidate.otherNodeId()));
                         }
 
                         break;
@@ -1250,6 +1245,35 @@ public final class GridDhtLockFuture extends GridCacheCompoundIdentityFuture<Boo
                     }
                 }
             }
+
+            return found ? new T2<>(key, Collections.unmodifiableList(txCandidates)) : null;
+        }
+
+        /**
+         * @param key locked key.
+         * @param candidates candidates awaiting pending locks.
+         * @return String representation of pending locks.
+         */
+        private String dumpPendingLocks(KeyCacheObject key, List<T2<IgniteInternalTx, UUID>> candidates) {
+            StringBuilder sb = new StringBuilder();
+
+            T2<IgniteInternalTx, UUID> owner = candidates.get(0);
+
+            sb.append("Transaction tx=").append(tx.getClass().getSimpleName());
+            sb.append(" [xid=").append(tx.xid());
+            sb.append(", xidVer=").append(tx.xidVersion());
+            sb.append(", nearXid=").append(tx.nearXidVersion().asGridUuid());
+            sb.append(", nearXidVer=").append(tx.nearXidVersion());
+            sb.append(", label=").append(tx.label());
+            sb.append(", nearNodeId=").append(tx.nearNodeId());
+            sb.append("] timed out, can't acquire lock for key=").append(key);
+            sb.append(", owner=[xid=").append(owner.getKey().xid());
+            sb.append(", xidVer=").append(owner.getKey().xidVersion());
+            sb.append(", nearXid=").append(owner.getKey().nearXidVersion().asGridUuid());
+            sb.append(", nearXidVer=").append(owner.getKey().nearXidVersion());
+            sb.append(", label=").append(owner.getKey().label());
+            sb.append(", nearNodeId=").append(owner.getValue());
+            sb.append("], queueSize=").append(candidates.isEmpty() ? 0 : candidates.size() - 1);
 
             return sb.toString();
         }

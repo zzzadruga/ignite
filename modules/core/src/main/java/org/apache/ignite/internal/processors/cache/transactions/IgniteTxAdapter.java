@@ -293,6 +293,9 @@ public abstract class IgniteTxAdapter extends GridMetadataAwareAdapter implement
     /** Transaction from which this transaction was copied by(if it was). */
     private GridNearTxLocal parentTx;
 
+    /** List of candidates pending lock, where the first element is the owner. */
+    protected volatile List<T2<IgniteInternalTx, UUID>> lockOwner;
+
     /**
      * Empty constructor required for {@link Externalizable}.
      */

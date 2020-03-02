@@ -55,6 +55,7 @@ import org.apache.ignite.internal.util.tostring.GridToStringBuilder;
 import org.apache.ignite.internal.util.tostring.GridToStringExclude;
 import org.apache.ignite.internal.util.typedef.CX1;
 import org.apache.ignite.internal.util.typedef.F;
+import org.apache.ignite.internal.util.typedef.T2;
 import org.apache.ignite.internal.util.typedef.internal.CU;
 import org.apache.ignite.internal.util.typedef.internal.U;
 import org.apache.ignite.lang.IgniteUuid;
@@ -956,5 +957,12 @@ public abstract class GridDhtTxLocalAdapter extends IgniteTxLocalAdapter {
         TxCounters txCntrs = txCounters(false);
 
         return txCntrs != null ? txCntrs.lockCounter() : 0;
+    }
+
+    /**
+     * @param lockOwner List of candidates pending lock, where the first element is the owner.
+     */
+    protected void lockOwner(List<T2<IgniteInternalTx, UUID>> lockOwner) {
+        this.lockOwner = lockOwner;
     }
 }
