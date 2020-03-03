@@ -1704,7 +1704,7 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
     /**
      * @return List of candidates pending lock, where the first element is the owner.
      */
-    public List<T2<IgniteInternalTx, UUID>> lockOwner() {
+    @Nullable public List<T2<IgniteInternalTx, UUID>> lockOwner() {
         return lockOwner;
     }
 

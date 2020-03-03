@@ -17,6 +17,7 @@
 
 package org.apache.ignite.internal.managers;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -413,6 +414,50 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
 
             awaitPartitionMapExchange();
 
+            emulateTxLockTimeout1(grid1, grid2);
+
+            assertTrue(lsnr.check());
+        }
+        finally {
+            GridTestUtils.setFieldValue(GridDhtLockFuture.class, "log", oldLog);
+        }
+    }
+
+    /**
+     * Tests that {@link org.apache.ignite.internal.processors.cache.distributed.dht.GridDhtLockFuture} timeout object
+     * dumps debug info to log.
+     *
+     * @throws Exception If fails.
+     */
+    @Test
+    public void testTimeOutTxLock1() throws Exception {
+        final int longOpDumpTimeout = 500;
+
+        ListeningTestLogger testLog = new ListeningTestLogger(false, log);
+
+        IgniteLogger oldLog = GridTestUtils.getFieldValue(GridDhtLockFuture.class, "log");
+
+        GridTestUtils.setFieldValue(GridDhtLockFuture.class, "log", testLog);
+
+        try {
+            IgniteEx grid1 = startGrid(0);
+
+            LogListener lsnr = LogListener
+                .matches(Pattern.compile("Transaction tx=GridNearTxLocal \\[.*\\] timed out, can't acquire lock for"))
+                .andMatches(Pattern.compile(".*xid=.*, xidVer=.*, nearXid=.*, nearXidVer=.*, label=lock, " +
+                    "nearNodeId=" + grid1.cluster().localNode().id() + ".*"))
+                .build();
+
+            testLog.registerListener(lsnr);
+
+            this.testLog = testLog;
+
+            IgniteEx grid2 = startGrid(1);
+
+            IgniteEx grid3 = startGrid(3);
+
+            awaitPartitionMapExchange();
+
             emulateTxLockTimeout(grid1, grid2);
 
             assertTrue(lsnr.check());
@@ -680,6 +725,77 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
                 }
             }
         }
+    }
+
+    /**
+     * Emulates tx lock timeout.
+     *
+     * @param nodes nodes list.
+     * @throws Exception If failed.
+     */
+    private void emulateTxLockTimeout1(Ignite... nodes) throws Exception {
+        assert nodes.length > 0;
+
+        nodes[0].createCache(cacheConfiguration(TRANSACTIONAL).setBackups(1));
+
+        final CountDownLatch l1 = new CountDownLatch(1);
+        final CountDownLatch l2 = new CountDownLatch(nodes.length == 1 ? 1 : (nodes.length - 1));
+
+        IgniteInternalFuture<?> fut1 = runAsync(new Runnable() {
+            @Override public void run() {
+                try {
+                    try (Transaction tx = nodes[0].transactions().withLabel("lock")
+                        .txStart(PESSIMISTIC, REPEATABLE_READ, 60_000, 2)) {
+                        nodes[0].cache(DEFAULT_CACHE_NAME).put(1, 1);
+
+                        l1.countDown();
+                        System.out.println(">>>>>>>> l1 countdown");
+                        U.awaitQuiet(l2);
+                        System.out.println(">>>>>>>> l2 await");
+                        U.sleep(100);
+
+                        tx.commit();
+                    }
+                }
+                catch (Exception e) {
+                    log.error("Failed on node1", e);
+                }
+            }
+        }, "FirstNode0");
+
+        AtomicInteger num = new AtomicInteger(nodes.length == 1 ? 0 : 1);
+        List<IgniteInternalFuture> futures = new ArrayList<>();
+
+        System.out.println(">>>>>>>> next 1");
+
+        do {
+            futures.add(runAsync(new Runnable() {
+                @Override public void run() {
+                    System.out.println(">>>>>>>> start tx");
+                    try (Transaction tx = nodes[num.get()].transactions().withLabel("lock")
+                        .txStart(PESSIMISTIC, REPEATABLE_READ, 2000L, 2)) {
+                        U.awaitQuiet(l1);
+                        System.out.println(">>>>>>>> l1 await");
+                        nodes[num.get()].cache(DEFAULT_CACHE_NAME).put(1, 10 * num.get());
+
+                        tx.commit();
+                    }
+                    catch (Exception e) {
+                        log.error("Failed on node[" + num.get() + "] " +
+                            nodes[num.get()].cluster().localNode().id(), e);
+
+                        l2.countDown();
+                        System.out.println(">>>>>>>> l2 countdown");
+                    }
+                }
+            }, "node[" + num.get() + "]"));
+        } while (num.incrementAndGet() < nodes.length);
+
+
+        fut1.get();
+
+        for (IgniteInternalFuture future : futures)
+            future.get();
     }
 
     /**

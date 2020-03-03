@@ -876,7 +876,7 @@ public class GridCacheUtils {
 
     /**
      * @param tx Transaction.
-     * @return String view of all safe-to-print transaction properties.
+     * @return String view of owner of expected lock (when the transaction timeout is exceeded).
      */
     public static String txDumpLockOwner(@Nullable IgniteInternalTx tx) {
         if (!(tx instanceof IgniteTxLocalAdapter) || ((IgniteTxLocalAdapter)tx).lockOwner() == null)
