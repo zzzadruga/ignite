@@ -293,9 +293,6 @@ public abstract class IgniteTxAdapter extends GridMetadataAwareAdapter implement
     /** Transaction from which this transaction was copied by(if it was). */
     private GridNearTxLocal parentTx;
 
-    /** List of candidates pending lock, where the first element is the owner. */
-    protected volatile List<T2<IgniteInternalTx, UUID>> lockOwner;
-
     /**
      * Empty constructor required for {@link Externalizable}.
      */
@@ -785,7 +782,7 @@ public abstract class IgniteTxAdapter extends GridMetadataAwareAdapter implement
      */
     public final IgniteCheckedException timeoutException() {
         return new IgniteTxTimeoutCheckedException("Failed to acquire lock within provided timeout " +
-            "for transaction [timeout=" + timeout() + ", tx=" + CU.txString(this) + ']');
+            "for transaction [timeout=" + timeout() + ", tx=" + CU.txString(this) + ']' + CU.txDumpLockOwner(this));
     }
 
     /**

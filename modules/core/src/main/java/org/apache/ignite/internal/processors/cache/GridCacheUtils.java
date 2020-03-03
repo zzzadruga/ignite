@@ -76,7 +76,9 @@ import org.apache.ignite.internal.processors.cache.distributed.near.GridNearTxLo
 import org.apache.ignite.internal.processors.cache.mvcc.txlog.TxLog;
 import org.apache.ignite.internal.processors.cache.persistence.metastorage.MetaStorage;
 import org.apache.ignite.internal.processors.cache.transactions.IgniteInternalTx;
+import org.apache.ignite.internal.processors.cache.transactions.IgniteTxAdapter;
 import org.apache.ignite.internal.processors.cache.transactions.IgniteTxEntry;
+import org.apache.ignite.internal.processors.cache.transactions.IgniteTxLocalAdapter;
 import org.apache.ignite.internal.processors.cache.version.GridCacheVersion;
 import org.apache.ignite.internal.processors.cluster.DiscoveryDataClusterState;
 import org.apache.ignite.internal.processors.dr.GridDrType;
@@ -870,6 +872,35 @@ public class GridCacheUtils {
             ", duration=" + (U.currentTimeMillis() - tx.startTime()) +
             (tx instanceof GridNearTxLocal ? ", label=" + tx.label() : "") +
             ']';
+    }
+
+    /**
+     * @param tx Transaction.
+     * @return String view of all safe-to-print transaction properties.
+     */
+    public static String txDumpLockOwner(@Nullable IgniteInternalTx tx) {
+        if (!(tx instanceof IgniteTxLocalAdapter) || ((IgniteTxLocalAdapter)tx).lockOwner() == null)
+            return "";
+
+        List<T2<IgniteInternalTx, UUID>> lockOwner = ((IgniteTxLocalAdapter)tx).lockOwner();
+
+        StringBuilder candidates = new StringBuilder();
+
+        for (int i = 0; i < lockOwner.size(); i++) {
+            T2<IgniteInternalTx, UUID> candidate = lockOwner.get(i);
+
+            candidates.append(", ").append(i == 0 ? "lock owner=" : i == 1 ? "queue=[" : "")
+                .append("[xid=").append(candidate.getKey().xid())
+                .append(", xidVer=").append(candidate.getKey().xidVersion())
+                .append(", nearXid=").append(candidate.getKey().nearXidVersion().asGridUuid())
+                .append(", nearXidVer=").append(candidate.getKey().nearXidVersion())
+                .append(", label=").append(candidate.getKey().label())
+                .append(", nearNodeId=").append(candidate.getValue())
+                .append(i > 0 && i == lockOwner.size() - 1? "]]" : "]");
+        }
+
+        return candidates.toString();
+
     }
 
     /**

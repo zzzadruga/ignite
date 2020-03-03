@@ -158,6 +158,9 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
     /** */
     protected volatile boolean qryEnlisted;
 
+    /** List of candidates pending lock, where the first element is the owner. */
+    private volatile List<T2<IgniteInternalTx, UUID>> lockOwner;
+
     /**
      * Empty constructor required for {@link Externalizable}.
      */
@@ -1692,6 +1695,21 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
     }
 
     /**
+     * @param lockOwner List of candidates pending lock, where the first element is the owner.
+     */
+    public void lockOwner(List<T2<IgniteInternalTx, UUID>> lockOwner) {
+        this.lockOwner = lockOwner;
+    }
+
+    /**
+     * @return List of candidates pending lock, where the first element is the owner.
+     */
+    public List<T2<IgniteInternalTx, UUID>> lockOwner() {
+        return lockOwner;
+    }
+
+
+    /**
      * Post-lock closure alias.
      *
      * @param <T> Return type.
@@ -1795,28 +1813,10 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
             if (deadlockErr != null || !locked) {
                 setRollbackOnly();
 
-                StringBuilder candidates = new StringBuilder();
-
-                if (lockOwner != null) {
-                    for (int i = 0; i < lockOwner.size(); i++) {
-                        T2<IgniteInternalTx, UUID> candidate = lockOwner.get(i);
-
-                        candidates.append(", ").append(i == 0 ? "lock owner=" : i == 1 ? "queue=[" : "")
-                            .append("[xid=").append(candidate.getKey().xid())
-                            .append(", xidVer=").append(candidate.getKey().xidVersion())
-                            .append(", nearXid=").append(candidate.getKey().nearXidVersion().asGridUuid())
-                            .append(", nearXidVer=").append(candidate.getKey().nearXidVersion())
-                            .append(", label=").append(candidate.getKey().label())
-                            .append(", nearNodeId=").append(candidate.getValue())
-                            .append(i > 0 && i == lockOwner.size() - 1? "]]" : "]");
-                    }
-
-                }
-
                 final GridClosureException ex = new GridClosureException(
                     new IgniteTxTimeoutCheckedException("Failed to acquire lock within provided timeout " +
                         "for transaction [timeout=" + timeout() + ", tx=" + CU.txString(IgniteTxLocalAdapter.this) +
-                        ']' + candidates, deadlockErr)
+                        ']' + CU.txDumpLockOwner(IgniteTxLocalAdapter.this), deadlockErr)
                 );
 
                 if (commit && commitAfterLock())

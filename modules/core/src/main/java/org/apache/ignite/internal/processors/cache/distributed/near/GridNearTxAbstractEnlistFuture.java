@@ -43,6 +43,7 @@ import org.apache.ignite.internal.processors.timeout.GridTimeoutObjectAdapter;
 import org.apache.ignite.internal.transactions.IgniteTxRollbackCheckedException;
 import org.apache.ignite.internal.transactions.IgniteTxTimeoutCheckedException;
 import org.apache.ignite.internal.util.tostring.GridToStringExclude;
+import org.apache.ignite.internal.util.typedef.internal.CU;
 import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.internal.util.typedef.internal.U;
 import org.apache.ignite.lang.IgniteInClosure;
@@ -450,7 +451,7 @@ public abstract class GridNearTxAbstractEnlistFuture<T> extends GridCacheCompoun
      */
     @NotNull protected IgniteTxTimeoutCheckedException timeoutException() {
         return new IgniteTxTimeoutCheckedException("Failed to acquire lock within provided timeout for " +
-            "transaction [timeout=" + timeout + ", tx=" + tx + ']');
+            "transaction [timeout=" + timeout + ", tx=" + tx + ']' + CU.txDumpLockOwner(tx));
     }
 
     /**

@@ -958,11 +958,4 @@ public abstract class GridDhtTxLocalAdapter extends IgniteTxLocalAdapter {
 
         return txCntrs != null ? txCntrs.lockCounter() : 0;
     }
-
-    /**
-     * @param lockOwner List of candidates pending lock, where the first element is the owner.
-     */
-    protected void lockOwner(List<T2<IgniteInternalTx, UUID>> lockOwner) {
-        this.lockOwner = lockOwner;
-    }
 }
