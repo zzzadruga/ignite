@@ -362,7 +362,7 @@ public final class GridNearLockFuture extends GridCacheCompoundIdentityFuture<Bo
 
         if (c == null && timeout < 0) {
             if (log.isDebugEnabled())
-                log.debug("Failed to acquire lock with negative timeout: " + entry);
+                log.debug("14Failed to acquire lock with negative timeout: " + entry);
 
             onFailed(false);
 
@@ -1448,7 +1448,7 @@ public final class GridNearLockFuture extends GridCacheCompoundIdentityFuture<Bo
      * @return Topology exception with user-friendly message.
      */
     private ClusterTopologyCheckedException newTopologyException(@Nullable Throwable nested, UUID nodeId) {
-        ClusterTopologyCheckedException topEx = new ClusterTopologyCheckedException("Failed to acquire lock for keys " +
+        ClusterTopologyCheckedException topEx = new ClusterTopologyCheckedException("15Failed to acquire lock for keys " +
             "(primary node left grid, retry transaction if possible) [keys=" + keys + ", node=" + nodeId + ']', nested);
 
         topEx.retryReadyFuture(cctx.shared().nextAffinityReadyFuture(topVer));
@@ -1499,7 +1499,7 @@ public final class GridNearLockFuture extends GridCacheCompoundIdentityFuture<Bo
                             try {
                                 TxDeadlock deadlock = fut.get();
 
-                                err = new IgniteTxTimeoutCheckedException("Failed to acquire lock within provided " +
+                                err = new IgniteTxTimeoutCheckedException("16Failed to acquire lock within provided " +
                                     "timeout for transaction [timeout=" + tx.timeout() + ", tx=" + CU.txString(tx) + ']'
                                     + CU.txDumpLockOwner(tx), deadlock != null ?
                                     new TransactionDeadlockException(deadlock.toString(cctx.shared())) : null);

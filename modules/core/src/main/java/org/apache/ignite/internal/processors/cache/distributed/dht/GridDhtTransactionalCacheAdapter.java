@@ -344,7 +344,7 @@ public abstract class GridDhtTransactionalCacheAdapter<K, V> extends GridDhtCach
                                 tx = ctx.tm().onCreated(null, tx);
 
                                 if (tx == null || !ctx.tm().onStarted(tx))
-                                    throw new IgniteTxRollbackCheckedException("Failed to acquire lock (transaction " +
+                                    throw new IgniteTxRollbackCheckedException("8Failed to acquire lock (transaction " +
                                         "has been completed) [ver=" + req.version() + ", tx=" + tx + ']');
                             }
 
@@ -1132,7 +1132,7 @@ public abstract class GridDhtTransactionalCacheAdapter<K, V> extends GridDhtCach
                         tx = ctx.tm().onCreated(null, tx);
 
                         if (tx == null || !tx.init()) {
-                            String msg = "Failed to acquire lock (transaction has been completed): " +
+                            String msg = "9Failed to acquire lock (transaction has been completed): " +
                                 req.version();
 
                             U.warn(log, msg);
@@ -2184,7 +2184,7 @@ public abstract class GridDhtTransactionalCacheAdapter<K, V> extends GridDhtCach
                 tx = ctx.tm().onCreated(null, tx);
 
                 if (tx == null || !tx.init()) {
-                    String msg = "Failed to acquire lock (transaction has been completed): " +
+                    String msg = "11Failed to acquire lock (transaction has been completed): " +
                         nearLockVer;
 
                     U.warn(log, msg);

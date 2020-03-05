@@ -81,7 +81,7 @@ public abstract class GridNearOptimisticTxPrepareFutureAdapter extends GridNearT
     /** {@inheritDoc} */
     @Override public final void onNearTxLocalTimeout() {
         if (keyLockFut != null && !keyLockFut.isDone()) {
-            ERR_UPD.compareAndSet(this, null, new IgniteTxTimeoutCheckedException("Failed to acquire lock " +
+            ERR_UPD.compareAndSet(this, null, new IgniteTxTimeoutCheckedException("18Failed to acquire lock " +
                     "within provided timeout for transaction [timeout=" + tx.timeout() + ", tx=" + tx + ']'));
 
             keyLockFut.onDone();

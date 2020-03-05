@@ -1081,7 +1081,7 @@ public abstract class GridDhtTxAbstractEnlistFuture<T> extends GridCacheFutureAd
      * @return Timeout exception.
      */
     @NotNull protected IgniteTxTimeoutCheckedException timeoutException() {
-        return new IgniteTxTimeoutCheckedException("Failed to acquire lock within provided timeout for " +
+        return new IgniteTxTimeoutCheckedException("1Failed to acquire lock within provided timeout for " +
             "transaction [timeout=" + timeout + ", tx=" + tx + ']' + CU.txDumpLockOwner(tx));
     }
 

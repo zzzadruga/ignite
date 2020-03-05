@@ -737,7 +737,7 @@ public class GridNearOptimisticTxPrepareFuture extends GridNearOptimisticTxPrepa
                     if (e != null)
                         U.warn(log, "Failed to detect deadlock.", e);
                     else {
-                        e = new IgniteTxTimeoutCheckedException("Failed to acquire lock within provided timeout for " +
+                        e = new IgniteTxTimeoutCheckedException("2Failed to acquire lock within provided timeout for " +
                             "transaction [timeout=" + tx.timeout() + ", tx=" + CU.txString(tx) + ']' +
                             CU.txDumpLockOwner(tx), deadlock != null ?
                             new TransactionDeadlockException(deadlock.toString(cctx)) : null);
@@ -754,7 +754,7 @@ public class GridNearOptimisticTxPrepareFuture extends GridNearOptimisticTxPrepa
             }, cctx.tm().detectDeadlock(tx, keys)));
         }
         else {
-            ERR_UPD.compareAndSet(this, null, new IgniteTxTimeoutCheckedException("Failed to acquire lock " +
+            ERR_UPD.compareAndSet(this, null, new IgniteTxTimeoutCheckedException("17Failed to acquire lock " +
                 "within provided timeout for transaction [timeout=" + tx.timeout() + ", tx=" + tx + ']'));
 
             onComplete();

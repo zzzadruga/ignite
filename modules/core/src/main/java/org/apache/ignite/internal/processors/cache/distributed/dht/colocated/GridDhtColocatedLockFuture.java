@@ -1452,7 +1452,7 @@ public final class GridDhtColocatedLockFuture extends GridCacheCompoundIdentityF
      * @return Topology exception with user-friendly message.
      */
     private ClusterTopologyCheckedException newTopologyException(@Nullable Throwable nested, UUID nodeId) {
-        ClusterTopologyCheckedException topEx = new ClusterTopologyCheckedException("Failed to acquire lock for keys " +
+        ClusterTopologyCheckedException topEx = new ClusterTopologyCheckedException("12Failed to acquire lock for keys " +
             "(primary node left grid, retry transaction if possible) [keys=" + keys + ", node=" + nodeId + ']', nested);
 
         topEx.retryReadyFuture(cctx.shared().nextAffinityReadyFuture(topVer));
@@ -1518,7 +1518,7 @@ public final class GridDhtColocatedLockFuture extends GridCacheCompoundIdentityF
                             try {
                                 TxDeadlock deadlock = fut.get();
 
-                                err = new IgniteTxTimeoutCheckedException("Failed to acquire lock within provided " +
+                                err = new IgniteTxTimeoutCheckedException("13Failed to acquire lock within provided " +
                                     "timeout for transaction [timeout=" + tx.timeout() + ", tx=" + CU.txString(tx) + ']'
                                     + CU.txDumpLockOwner(tx), deadlock != null ?
                                     new TransactionDeadlockException(deadlock.toString(cctx.shared())) : null);

@@ -340,7 +340,7 @@ public class GridNearTransactionalCache<K, V> extends GridNearCacheAdapter<K, V>
                                     tx = ctx.tm().onCreated(null, tx);
 
                                     if (tx == null || !ctx.tm().onStarted(tx))
-                                        throw new IgniteTxRollbackCheckedException("Failed to acquire lock " +
+                                        throw new IgniteTxRollbackCheckedException("19Failed to acquire lock " +
                                             "(transaction has been completed): " + req.version());
                                 }
 

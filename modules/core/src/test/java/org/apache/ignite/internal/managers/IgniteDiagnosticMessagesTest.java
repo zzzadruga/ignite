@@ -414,7 +414,7 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
 
             awaitPartitionMapExchange();
 
-            emulateTxLockTimeout1(grid1, grid2);
+            emulateTxLockTimeout(grid1, grid2);
 
             assertTrue(lsnr.check());
         }
@@ -431,8 +431,6 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
      */
     @Test
     public void testTimeOutTxLock1() throws Exception {
-        final int longOpDumpTimeout = 500;
-
         ListeningTestLogger testLog = new ListeningTestLogger(false, log);
 
         IgniteLogger oldLog = GridTestUtils.getFieldValue(GridDhtLockFuture.class, "log");
@@ -458,7 +456,7 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
 
             awaitPartitionMapExchange();
 
-            emulateTxLockTimeout(grid1, grid2);
+            emulateTxLockTimeout1(grid1, grid2);
 
             assertTrue(lsnr.check());
         }
@@ -741,60 +739,61 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
         final CountDownLatch l1 = new CountDownLatch(1);
         final CountDownLatch l2 = new CountDownLatch(nodes.length == 1 ? 1 : (nodes.length - 1));
 
-        IgniteInternalFuture<?> fut1 = runAsync(new Runnable() {
+        List<IgniteInternalFuture<?>> futures = new ArrayList<>();
+
+        futures.add(runAsync(new Runnable() {
             @Override public void run() {
                 try {
                     try (Transaction tx = nodes[0].transactions().withLabel("lock")
                         .txStart(PESSIMISTIC, REPEATABLE_READ, 60_000, 2)) {
                         nodes[0].cache(DEFAULT_CACHE_NAME).put(1, 1);
-
+                        System.out.println(">>>>>> tx1 \n" +
+                            ">>>>>> nodeId: " + tx.nodeId() + "\n" +
+                            ">>>>>> xid:" + tx.xid());
                         l1.countDown();
-                        System.out.println(">>>>>>>> l1 countdown");
+
                         U.awaitQuiet(l2);
-                        System.out.println(">>>>>>>> l2 await");
+
                         U.sleep(100);
 
                         tx.commit();
                     }
                 }
                 catch (Exception e) {
-                    log.error("Failed on node1", e);
+                    log.error("Failed on node 0", e);
                 }
             }
-        }, "FirstNode0");
+        }, "node[0]-lockOwner"));
 
-        AtomicInteger num = new AtomicInteger(nodes.length == 1 ? 0 : 1);
-        List<IgniteInternalFuture> futures = new ArrayList<>();
+        // if one node, start the next TX on this node, otherwise on another node.
+        for (int i = (nodes.length == 1 ? 0 : 1); i < nodes.length; i++) {
 
-        System.out.println(">>>>>>>> next 1");
+            int num = i;
 
-        do {
             futures.add(runAsync(new Runnable() {
                 @Override public void run() {
-                    System.out.println(">>>>>>>> start tx");
-                    try (Transaction tx = nodes[num.get()].transactions().withLabel("lock")
+                    try (Transaction tx = nodes[num].transactions().withLabel("lock")
                         .txStart(PESSIMISTIC, REPEATABLE_READ, 2000L, 2)) {
+                        System.out.println(">>>>>> tx2 \n" +
+                            ">>>>>> nodeId: " + tx.nodeId() + "\n" +
+                            ">>>>>> xid:" + tx.xid());
                         U.awaitQuiet(l1);
-                        System.out.println(">>>>>>>> l1 await");
-                        nodes[num.get()].cache(DEFAULT_CACHE_NAME).put(1, 10 * num.get());
+
+                        nodes[num].cache(DEFAULT_CACHE_NAME).put(1, 10 * num);
 
                         tx.commit();
                     }
                     catch (Exception e) {
-                        log.error("Failed on node[" + num.get() + "] " +
-                            nodes[num.get()].cluster().localNode().id(), e);
+                        log.error("Failed on node[" + num + "] " +
+                            nodes[num].cluster().localNode().id(), e);
 
                         l2.countDown();
-                        System.out.println(">>>>>>>> l2 countdown");
                     }
                 }
-            }, "node[" + num.get() + "]"));
-        } while (num.incrementAndGet() < nodes.length);
+            }, "node[" + num + "]"));
+        }
 
-
-        fut1.get();
-
-        for (IgniteInternalFuture future : futures)
+        for (IgniteInternalFuture<?> future : futures)
             future.get();
     }
 

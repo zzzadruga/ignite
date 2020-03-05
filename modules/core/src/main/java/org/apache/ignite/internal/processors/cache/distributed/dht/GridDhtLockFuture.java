@@ -439,7 +439,7 @@ public final class GridDhtLockFuture extends GridCacheCompoundIdentityFuture<Boo
 
         if (c == null && timeout < 0) {
             if (log.isDebugEnabled())
-                log.debug("Failed to acquire lock with negative timeout: " + entry);
+                log.debug("7Failed to acquire lock with negative timeout: " + entry);
 
             onFailed(false);
 

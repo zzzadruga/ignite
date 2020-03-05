@@ -291,7 +291,7 @@ public final class GridLocalLockFuture<K, V> extends GridCacheFutureAdapter<Bool
 
         if (c == null && timeout < 0) {
             if (log.isDebugEnabled())
-                log.debug("Failed to acquire lock with negative timeout: " + entry);
+                log.debug("4Failed to acquire lock with negative timeout: " + entry);
 
             onFailed();
 
@@ -525,7 +525,7 @@ public final class GridLocalLockFuture<K, V> extends GridCacheFutureAdapter<Bool
                             try {
                                 TxDeadlock deadlock = fut.get();
 
-                                err = new IgniteTxTimeoutCheckedException("Failed to acquire lock within provided " +
+                                err = new IgniteTxTimeoutCheckedException("5Failed to acquire lock within provided " +
                                     "timeout for transaction [timeout=" + tx.timeout() + ", tx=" + CU.txString(tx) + ']'
                                     + CU.txDumpLockOwner(tx), deadlock != null ?
                                     new TransactionDeadlockException(deadlock.toString(cctx.shared())) : null);
@@ -541,7 +541,7 @@ public final class GridLocalLockFuture<K, V> extends GridCacheFutureAdapter<Bool
                     });
                 }
                 else
-                    err = new IgniteTxTimeoutCheckedException("Failed to acquire lock within provided " +
+                    err = new IgniteTxTimeoutCheckedException("6Failed to acquire lock within provided " +
                         "timeout for transaction [timeout=" + tx.timeout() + ", tx=" + CU.txString(tx) + ']' +
                         CU.txDumpLockOwner(tx));
             }

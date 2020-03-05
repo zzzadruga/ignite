@@ -1814,7 +1814,7 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
                 setRollbackOnly();
 
                 final GridClosureException ex = new GridClosureException(
-                    new IgniteTxTimeoutCheckedException("Failed to acquire lock within provided timeout " +
+                    new IgniteTxTimeoutCheckedException("20Failed to acquire lock within provided timeout " +
                         "for transaction [timeout=" + timeout() + ", tx=" + CU.txString(IgniteTxLocalAdapter.this) +
                         ']' + CU.txDumpLockOwner(IgniteTxLocalAdapter.this), deadlockErr)
                 );
@@ -1895,7 +1895,7 @@ public abstract class IgniteTxLocalAdapter extends IgniteTxAdapter implements Ig
                     throw new GridClosureException(e);
 
                 if (!locked)
-                    throw new GridClosureException(new IgniteTxTimeoutCheckedException("Failed to acquire lock " +
+                    throw new GridClosureException(new IgniteTxTimeoutCheckedException("21Failed to acquire lock " +
                         "within provided timeout for transaction [timeout=" + timeout() +
                         ", tx=" + CU.txString(IgniteTxLocalAdapter.this) + ']'));
 
