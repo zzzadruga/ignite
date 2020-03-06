@@ -17,8 +17,11 @@
 
 package org.apache.ignite.internal.managers;
 
+import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -101,11 +104,11 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
             strLog = null;
         }
 
-        if (testLog != null) {
+/*        if (testLog != null) {
             cfg.setGridLogger(testLog);
 
             testLog = null;
-        }
+        }*/
 
         return cfg;
     }
@@ -431,7 +434,7 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
      */
     @Test
     public void testTimeOutTxLock1() throws Exception {
-        ListeningTestLogger testLog = new ListeningTestLogger(false, log);
+        testLog = new ListeningTestLogger(false, log);
 
         IgniteLogger oldLog = GridTestUtils.getFieldValue(GridDhtLockFuture.class, "log");
 
@@ -440,25 +443,21 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
         try {
             IgniteEx grid1 = startGrid(0);
 
-            LogListener lsnr = LogListener
-                .matches(Pattern.compile("Transaction tx=GridNearTxLocal \\[.*\\] timed out, can't acquire lock for"))
-                .andMatches(Pattern.compile(".*xid=.*, xidVer=.*, nearXid=.*, nearXidVer=.*, label=lock, " +
-                    "nearNodeId=" + grid1.cluster().localNode().id() + ".*"))
-                .build();
-
-            testLog.registerListener(lsnr);
-
-            this.testLog = testLog;
-
             IgniteEx grid2 = startGrid(1);
-
-            IgniteEx grid3 = startGrid(3);
 
             awaitPartitionMapExchange();
 
+            LogListener lsnr1 = LogListener.matches(Pattern.compile("The transaction was forcibly"/* + "\\[xid=.*, xidVer=.*, nearXid=" +
+            transactions.get(0).xid() + ", nearXidVer=.*, label=lock, " + "nearNodeId=" + transactions.get(0).nodeId() +
+                "\\], queue=\\[\\[xid=" + transactions.get(1).xid() + ", xidVer=.*, nearXid=" +
+                transactions.get(1).xid() + ", nearXidVer=.*, label=lock, nearNodeId=" +
+                transactions.get(1).nodeId() + "\\]\\]"*/)).build();
+
+            testLog.registerListener(lsnr1);
+
             emulateTxLockTimeout1(grid1, grid2);
 
-            assertTrue(lsnr.check());
+            assertTrue(lsnr1.check(2_000));
         }
         finally {
             GridTestUtils.setFieldValue(GridDhtLockFuture.class, "log", oldLog);
@@ -736,16 +735,23 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
 
         nodes[0].createCache(cacheConfiguration(TRANSACTIONAL).setBackups(1));
 
+        final CountDownLatch allTxStarted = new CountDownLatch(nodes.length == 1 ? 2 : nodes.length );
         final CountDownLatch l1 = new CountDownLatch(1);
         final CountDownLatch l2 = new CountDownLatch(nodes.length == 1 ? 1 : (nodes.length - 1));
+        List<Transaction> transactions = new ArrayList<>();
 
         List<IgniteInternalFuture<?>> futures = new ArrayList<>();
 
         futures.add(runAsync(new Runnable() {
             @Override public void run() {
                 try {
-                    try (Transaction tx = nodes[0].transactions().withLabel("lock")
-                        .txStart(PESSIMISTIC, REPEATABLE_READ, 60_000, 2)) {
+                    try (Transaction tx = nodes[0].transactions().withLabel("lock").
+                        txStart(PESSIMISTIC, REPEATABLE_READ, 60_000, 2)) {
+
+                        transactions.add(tx);
+
+                        allTxStarted.countDown();
+
                         nodes[0].cache(DEFAULT_CACHE_NAME).put(1, 1);
                         System.out.println(">>>>>> tx1 \n" +
                             ">>>>>> nodeId: " + tx.nodeId() + "\n" +
@@ -774,6 +780,11 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
                 @Override public void run() {
                     try (Transaction tx = nodes[num].transactions().withLabel("lock")
                         .txStart(PESSIMISTIC, REPEATABLE_READ, 2000L, 2)) {
+
+                        transactions.add(tx);
+
+                        allTxStarted.countDown();
+
                         System.out.println(">>>>>> tx2 \n" +
                             ">>>>>> nodeId: " + tx.nodeId() + "\n" +
                             ">>>>>> xid:" + tx.xid());
@@ -793,8 +804,16 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
             }, "node[" + num + "]"));
         }
 
-        for (IgniteInternalFuture<?> future : futures)
+        assertTrue(waitForCondition(() -> transactions.size() == 2, 2_000));
+
+        System.out.println(">>>>>>>>>>>>>>>>>>> register " + LocalTime.now());
+        for (IgniteInternalFuture<?> future : futures) {
             future.get();
+        }
+
+        System.out.println(">>>>>>>>>>>>>>>>>> check");
+
+        //assertTrue(lsnr1.check(1_000));
     }
 
     /**
