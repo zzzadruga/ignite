@@ -880,7 +880,7 @@ public class GridCacheUtils {
      */
     public static String txDumpLockOwner(@Nullable IgniteInternalTx tx) {
         if (!(tx instanceof IgniteTxLocalAdapter) || ((IgniteTxLocalAdapter)tx).lockOwner() == null)
-            return "";
+            return "owner null";
 
         List<T2<IgniteInternalTx, UUID>> lockOwner = ((IgniteTxLocalAdapter)tx).lockOwner();
 
@@ -899,7 +899,7 @@ public class GridCacheUtils {
                 .append(i > 0 && i == lockOwner.size() - 1? "]]" : "]");
         }
 
-        return candidates.toString();
+        return candidates.toString().isEmpty() ? "empty empty" : candidates.toString();
 
     }
 

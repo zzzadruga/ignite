@@ -104,11 +104,11 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
             strLog = null;
         }
 
-/*        if (testLog != null) {
+        if (testLog != null) {
             cfg.setGridLogger(testLog);
 
-            testLog = null;
-        }*/
+            //testLog = null;
+        }
 
         return cfg;
     }
@@ -436,9 +436,9 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
     public void testTimeOutTxLock1() throws Exception {
         testLog = new ListeningTestLogger(false, log);
 
-        IgniteLogger oldLog = GridTestUtils.getFieldValue(GridDhtLockFuture.class, "log");
+        //IgniteLogger oldLog = GridTestUtils.getFieldValue(GridDhtLockFuture.class, "log");
 
-        GridTestUtils.setFieldValue(GridDhtLockFuture.class, "log", testLog);
+        //GridTestUtils.setFieldValue(GridDhtLockFuture.class, "log", testLog);
 
         try {
             IgniteEx grid1 = startGrid(0);
@@ -447,20 +447,10 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
 
             awaitPartitionMapExchange();
 
-            LogListener lsnr1 = LogListener.matches(Pattern.compile("The transaction was forcibly"/* + "\\[xid=.*, xidVer=.*, nearXid=" +
-            transactions.get(0).xid() + ", nearXidVer=.*, label=lock, " + "nearNodeId=" + transactions.get(0).nodeId() +
-                "\\], queue=\\[\\[xid=" + transactions.get(1).xid() + ", xidVer=.*, nearXid=" +
-                transactions.get(1).xid() + ", nearXidVer=.*, label=lock, nearNodeId=" +
-                transactions.get(1).nodeId() + "\\]\\]"*/)).build();
-
-            testLog.registerListener(lsnr1);
-
             emulateTxLockTimeout1(grid1, grid2);
-
-            assertTrue(lsnr1.check(2_000));
         }
         finally {
-            GridTestUtils.setFieldValue(GridDhtLockFuture.class, "log", oldLog);
+            //GridTestUtils.setFieldValue(GridDhtLockFuture.class, "log", oldLog);
         }
     }
 
@@ -744,11 +734,11 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
 
         futures.add(runAsync(new Runnable() {
             @Override public void run() {
-                try {
+                //try {
                     try (Transaction tx = nodes[0].transactions().withLabel("lock").
                         txStart(PESSIMISTIC, REPEATABLE_READ, 60_000, 2)) {
 
-                        transactions.add(tx);
+                        transactions.add(0, tx);
 
                         allTxStarted.countDown();
 
@@ -760,14 +750,14 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
 
                         U.awaitQuiet(l2);
 
-                        U.sleep(100);
+                        doSleep(100);
 
                         tx.commit();
                     }
-                }
-                catch (Exception e) {
+               // }
+/*                catch (Exception e) {
                     log.error("Failed on node 0", e);
-                }
+                }*/
             }
         }, "node[0]-lockOwner"));
 
@@ -794,17 +784,37 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
 
                         tx.commit();
                     }
-                    catch (Exception e) {
+                    /*catch (Exception e) {
                         log.error("Failed on node[" + num + "] " +
-                            nodes[num].cluster().localNode().id(), e);
-
+                            nodes[num].cluster().localNode().id(), e);*/
+                    finally {
                         l2.countDown();
                     }
                 }
             }, "node[" + num + "]"));
         }
 
-        assertTrue(waitForCondition(() -> transactions.size() == 2, 2_000));
+        assertTrue(waitForCondition(() -> transactions.size() == 2, 3_000));
+
+        String pattern = "lock owner=\\[xid=.*, xidVer=.*, nearXid=" +
+            transactions.get(0).xid() + ", nearXidVer=.*, label=lock, " + "nearNodeId=" + transactions.get(0).nodeId() +
+            "\\], queue=\\[\\[xid=" + transactions.get(1).xid() + ", xidVer=.*, nearXid=" +
+            transactions.get(1).xid() + ", nearXidVer=.*, label=lock, nearNodeId=" +
+            transactions.get(1).nodeId() + "\\]\\]";
+
+        LogListener lsnr1 = LogListener.matches(Pattern.compile(pattern)).build();
+
+        testLog.registerListener(LogListener.matches(Pattern.compile(pattern)).build());
+/*        testLog.registerListener(error -> {
+            Pattern ptrn = Pattern.compile(pattern);
+
+            if (ptrn.matcher(error).find()) {
+                fail();
+            }
+
+            if (error.contains("lock owner"))
+                System.out.println("!!!!!");
+        });*/
 
         System.out.println(">>>>>>>>>>>>>>>>>>> register " + LocalTime.now());
         for (IgniteInternalFuture<?> future : futures) {
@@ -813,7 +823,7 @@ public class IgniteDiagnosticMessagesTest extends GridCommonAbstractTest {
 
         System.out.println(">>>>>>>>>>>>>>>>>> check");
 
-        //assertTrue(lsnr1.check(1_000));
+        assertTrue(pattern, lsnr1.check(3_000));
     }
 
     /**

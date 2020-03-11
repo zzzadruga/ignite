@@ -1167,6 +1167,8 @@ public final class GridDhtLockFuture extends GridCacheCompoundIdentityFuture<Boo
         @Override public void onTimeout() {
             long longOpsDumpTimeout = cctx.tm().longOperationsDumpTimeout();
 
+            System.out.println(">>>>>>>>>>>>>>>>>>>> GridDhtLockFuture.LockTimeoutObject.onTimeout()");
+
             synchronized (GridDhtLockFuture.this) {
                 T2<KeyCacheObject, List<T2<IgniteInternalTx, UUID>>> candidates = candidatesAwaitingPendingLocks();
 
