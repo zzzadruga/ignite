@@ -249,7 +249,7 @@ import org.junit.runners.Suite;
  */
 @RunWith(Suite.class)
 @Suite.SuiteClasses({
-    AffinityKeyNameAndValueFieldNameConflictTest.class,
+/*    AffinityKeyNameAndValueFieldNameConflictTest.class,
     DmlInsideTransactionTest.class,
     ComplexPrimaryKeyUnwrapSelfTest.class,
     SqlNestedQuerySelfTest.class,
@@ -404,7 +404,7 @@ import org.junit.runners.Suite;
     H2DynamicIndexingComplexServerTransactionalPartitionedNoBackupsTest.class,
     H2DynamicIndexingComplexServerTransactionalReplicatedTest.class,
 
-    DdlTransactionSelfTest.class,
+    DdlTransactionSelfTest.class,*/
 
     // Fields queries.
     SqlFieldsQuerySelfTest.class,
@@ -422,7 +422,7 @@ import org.junit.runners.Suite;
     GridOrderedMessageCancelSelfTest.class,
     CacheQueryEvictDataLostTest.class,
 
-    // Full text queries.
+/*    // Full text queries.
     GridCacheFullTextQuerySelfTest.class,
     IgniteCacheFullTextQueryNodeJoiningSelfTest.class,
 
@@ -451,7 +451,7 @@ import org.junit.runners.Suite;
 
     // Cancellation.
     IgniteCacheDistributedQueryCancelSelfTest.class,
-    IgniteCacheLocalQueryCancelOrTimeoutSelfTest.class,
+    IgniteCacheLocalQueryCancelOrTimeoutSelfTest.class,*/
 
     // Distributed joins.
     H2CompareBigQueryDistributedJoinsTest.class,
@@ -466,7 +466,7 @@ import org.junit.runners.Suite;
 
     // Other.
     CacheIteratorScanQueryTest.class,
-    CacheQueryNewClientSelfTest.class,
+ /*   CacheQueryNewClientSelfTest.class,
     CacheOffheapBatchIndexingSingleTypeTest.class,
     CacheSqlQueryValueCopySelfTest.class,
     IgniteCacheQueryCacheDestroySelfTest.class,
@@ -545,7 +545,7 @@ import org.junit.runners.Suite;
 
         //Query history.
     SqlQueryHistorySelfTest.class,
-    SqlQueryHistoryFromClientSelfTest.class,
+    SqlQueryHistoryFromClientSelfTest.class,*/
 })
 public class IgniteBinaryCacheQueryTestSuite {
 }

@@ -19,6 +19,11 @@ package org.apache.ignite.internal.client;
 
 import org.apache.ignite.Ignite;
 import org.apache.ignite.IgniteCheckedException;
+import org.apache.ignite.Ignition;
+import org.apache.ignite.client.ClientCacheConfiguration;
+import org.apache.ignite.client.IgniteClient;
+import org.apache.ignite.configuration.CacheConfiguration;
+import org.apache.ignite.configuration.ClientConfiguration;
 import org.apache.ignite.internal.util.typedef.G;
 import org.apache.ignite.internal.util.typedef.internal.U;
 
@@ -55,6 +60,17 @@ public class ClientSslNodeStartup {
 
         try (Ignite g = G.start("modules/clients/src/test/resources/spring-server-ssl-node.xml")) {
             U.sleep(Long.MAX_VALUE);
+
+            g.getOrCreateCache(new CacheConfiguration<>()
+            .setExpiryPolicyFactory())
+        }
+
+        try (IgniteClient client = Ignition.startClient(new ClientConfiguration())) {
+            client.createCache(new ClientCacheConfiguration()
+            )
+        }
+        catch (Exception e) {
+            e.printStackTrace();
         }
     }
 }

@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.cache.CacheException;
 import org.apache.ignite.IgniteCache;
 import org.apache.ignite.cache.CacheAtomicityMode;
@@ -781,18 +782,16 @@ public abstract class IgniteCacheAbstractFieldsQuerySelfTest extends GridCommonA
      * Verifies that zero records are found when we have equality comparison in where clause (which is supposed
      * to use {@link BPlusTree#findOne(Object, Object)} instead of {@link BPlusTree#find(Object, Object, Object)}
      * and the key is not in the cache.
-     *
+     *+
      * @throws Exception If failed.
      */
     @Test
     public void testEmptyResultUsesFindOne() throws Exception {
         QueryCursor<List<?>> qry =
-            intCache.query(sqlFieldsQuery("select _val from Integer where _key = -10"));
+            personCache.query(sqlFieldsQuery("select count(1) _key from Person where _val = ?").setArgs(new AtomicBoolean()).setLazy(true));
 
-        List<List<?>> res = qry.getAll();
+        qry.iterator().next();
 
-        assertNotNull(res);
-        assertEquals(0, res.size());
     }
 
     /** @throws Exception If failed. */

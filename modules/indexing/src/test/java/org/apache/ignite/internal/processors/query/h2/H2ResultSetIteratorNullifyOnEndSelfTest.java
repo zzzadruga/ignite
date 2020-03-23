@@ -42,14 +42,14 @@ public class H2ResultSetIteratorNullifyOnEndSelfTest extends AbstractIndexingCom
     private static final int PERSON_COUNT = 20;
 
     /** */
-    private static final String SELECT_MAX_SAL_SQLF = "select max(salary) from Person";
+    private static final String SELECT_MAX_SAL_SQLF = "select max(salary) from Person where _val = ?";
 
     /**
      * Non local SQL Fields check nullification after close
      */
     @Test
     public void testSqlFieldsQueryClose() {
-        SqlFieldsQuery qry = new SqlFieldsQuery(SELECT_MAX_SAL_SQLF);
+        SqlFieldsQuery qry = new SqlFieldsQuery(SELECT_MAX_SAL_SQLF).setArgs("ll");
 
         QueryCursor<List<?>> qryCurs = cache().query(qry);
 

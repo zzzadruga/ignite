@@ -85,11 +85,11 @@ public class IgniteCachePartitionedQuerySelfTest extends IgniteCacheAbstractQuer
 
         // Fields query
         QueryCursor<List<?>> qry = cache0
-            .query(new SqlFieldsQuery("select name from Person where salary > ?").setArgs(1600));
+            .query(new SqlFieldsQuery("select name from Person where salary = ?").setArgs("aaaa").setLazy(true));
 
-        Collection<List<?>> res = qry.getAll();
+        qry.getAll().iterator().next();
 
-        assertEquals(3, res.size());
+/*        assertEquals(3, res.size());
 
         // Fields query count(*)
         qry = cache0.query(new SqlFieldsQuery("select count(*) from Person"));
@@ -101,7 +101,7 @@ public class IgniteCachePartitionedQuerySelfTest extends IgniteCacheAbstractQuer
         for (List<?> row : res)
             cnt += (Long)row.get(0);
 
-        assertEquals(4, cnt);
+        assertEquals(4, cnt);*/
     }
 
     /**

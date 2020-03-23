@@ -106,7 +106,7 @@ public class CacheSqlQueryValueCopySelfTest extends GridCommonAbstractTest {
 
             check(cache);
 
-            QueryCursor<List<?>> qry = cache.query(new SqlFieldsQuery("select _val from Value"));
+            QueryCursor<List<?>> qry = cache.query(new SqlFieldsQuery("select count(1) from Value where _key = ?").setArgs("wewe").setLazy(true));
 
             List<List<?>> all0 = qry.getAll();
 

@@ -127,7 +127,7 @@ public abstract class H2DynamicIndexingComplexAbstractTest extends DynamicIndexA
 
         assertEquals(PERSON_COUNT, r);
 
-        r = (Long)executeSqlSingle("SELECT COUNT(*) from Person p inner join City c on p.city = c.name");
+        r = (Long)executeSqlSingle("SELECT COUNT(*) from Person p inner join City c on p.city = c.name where p.age = ?", "JOPA");
 
         // Berkeley is not present in City table, although 25 people have it specified as their city.
         assertEquals(75L, r);
