@@ -859,11 +859,16 @@ namespace Apache.Ignite.Core.Tests.Services
             Assert.AreEqual(7, svc.testBinarizable(new PlatformComputeBinarizable {Field = 6}).Field);
 
             // Binary collections
-            var arr = new [] {10, 11, 12}.Select(x => new PlatformComputeBinarizable {Field = x}).ToArray<object>();
+            var enumerable  = new[] {10, 11, 12}.Select(x => new PlatformComputeBinarizable {Field = x});
+            var arrOfObj = enumerable.ToArray<object>();
+            var arr = enumerable.ToArray();
+            
             Assert.AreEqual(new[] {11, 12, 13}, svc.testBinarizableCollection(arr)
                 .OfType<PlatformComputeBinarizable>().Select(x => x.Field).ToArray());
             Assert.AreEqual(new[] {11, 12, 13},
-                svc.testBinarizableArray(arr).OfType<PlatformComputeBinarizable>().Select(x => x.Field).ToArray());
+                svc.testBinarizableArrayOfObjects(arrOfObj).OfType<PlatformComputeBinarizable>().Select(x => x.Field).ToArray());
+            Assert.AreEqual(new[] {11, 12, 13},
+                svc.testBinarizableArray(arr).Select(x => x.Field).ToArray());
 
             // Binary object
             Assert.AreEqual(15,
@@ -1486,7 +1491,10 @@ namespace Apache.Ignite.Core.Tests.Services
             PlatformComputeBinarizable testBinarizable(PlatformComputeBinarizable x);
 
             /** */
-            object[] testBinarizableArray(object[] x);
+            object[] testBinarizableArrayOfObjects(object[] x);
+            
+            /** */
+            PlatformComputeBinarizable[] testBinarizableArray(PlatformComputeBinarizable[] x);
 
             /** */
             ICollection testBinarizableCollection(ICollection x);
