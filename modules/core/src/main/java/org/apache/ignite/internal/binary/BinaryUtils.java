@@ -1961,7 +1961,7 @@ public class BinaryUtils {
                 return doReadTimeArray(in);
 
             case GridBinaryMarshaller.OBJ_ARR:
-                return doReadObjectArray(in, ctx, ldr, handles, false);
+                return doReadObjectArray(in, ctx, ldr, handles, true);
 
             case GridBinaryMarshaller.COL:
                 return doReadCollection(in, ctx, ldr, handles, false, null);
@@ -2008,7 +2008,7 @@ public class BinaryUtils {
         BinaryReaderHandlesHolder handles, boolean deserialize) throws BinaryObjectException {
         int hPos = positionForHandle(in);
 
-        Class compType = doReadClass(in, ctx, ldr, deserialize);
+        Class<?> compType = doReadClass(in, ctx, ldr, deserialize);
 
         int len = in.readInt();
 
