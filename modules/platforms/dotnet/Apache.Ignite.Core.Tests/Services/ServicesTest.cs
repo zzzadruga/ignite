@@ -863,12 +863,14 @@ namespace Apache.Ignite.Core.Tests.Services
             var arrOfObj = enumerable.ToArray<object>();
             var arr = enumerable.ToArray();
             
+            
             /*
             Assert.AreEqual(new[] {11, 12, 13}, svc.testBinarizableCollection(arr)
                 .OfType<PlatformComputeBinarizable>().Select(x => x.Field).ToArray());
             Assert.AreEqual(new[] {11, 12, 13},
                 svc.testBinarizableArrayOfObjects(arrOfObj).OfType<PlatformComputeBinarizable>().Select(x => x.Field).ToArray());
-            */
+                */
+            
             Assert.AreEqual(new[] {11, 12, 13},
                 svc.testBinarizableArray(arr).Select(x => x.Field).ToArray());
 

@@ -20,6 +20,7 @@ package org.apache.ignite.internal.processors.platform.services;
 import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.IgniteException;
 import org.apache.ignite.IgniteServices;
+import org.apache.ignite.Ignition;
 import org.apache.ignite.internal.binary.BinaryRawReaderEx;
 import org.apache.ignite.internal.binary.BinaryRawWriterEx;
 import org.apache.ignite.internal.processors.platform.PlatformAbstractTarget;
@@ -574,6 +575,10 @@ public class PlatformServices extends PlatformAbstractTarget {
                 return ((PlatformService)proxy).invokeMethod(mthdName, srvKeepBinary, args);
             else {
                 assert proxy instanceof GridServiceProxy;
+
+                // Deserialize arguments for Java service when not in binary mode
+                if (!srvKeepBinary)
+                    args = PlatformUtils.unwrapBinariesInArray(args);
 
                 Method mtd = getMethod(serviceClass, mthdName, args);
 
